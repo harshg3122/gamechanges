@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Customize launch splash screen for dark mode -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Background color gradient -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:startColor="#372AA4"
+                android:endColor="#D88A02"
+                android:angle="270" />
+        </shape>
+    </item>
+
+    <!-- App icon centered -->
+    <item
+        android:width="120dp"
+        android:height="120dp"
+        android:gravity="center">
+        <bitmap
+            android:gravity="fill"
+            android:src="@mipmap/ic_launcher" />
+    </item>
+</layer-list>

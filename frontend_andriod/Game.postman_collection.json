@@ -1,0 +1,1352 @@
+{
+	"info": {
+		"_postman_id": "5eb06c1c-2fd7-47d8-9a76-b9a90122a202",
+		"name": "Game",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "18929674",
+		"_collection_link": "https://speeding-comet-355969.postman.co/workspace/TechGLab~f7573543-a023-471c-896e-ac84f29e9d07/collection/18929674-5eb06c1c-2fd7-47d8-9a76-b9a90122a202?action=share&source=collection_link&creator=18929674"
+	},
+	"item": [
+		{
+			"name": "User",
+			"item": [
+				{
+					"name": "User Login Phone Number And Password",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "password",
+									"value": "vivekyadav",
+									"type": "text"
+								},
+								{
+									"key": "phoneNumber",
+									"value": "8570841028",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/user/login/phoneNumberAndPassword",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"user",
+								"login",
+								"phoneNumberAndPassword"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "User Login Email And Password",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "password",
+									"value": "vivekyadav",
+									"type": "text"
+								},
+								{
+									"key": "email",
+									"value": "vive5kya6av@gmail.com",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/user/login/emailAndPassword",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"user",
+								"login",
+								"emailAndPassword"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "User Login Username And Password",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "password",
+									"value": "vivekyadav",
+									"type": "text"
+								},
+								{
+									"key": "username",
+									"value": "vivekyadav123",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/user/login/usernameAndPassword",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"user",
+								"login",
+								"usernameAndPassword"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "User Logout",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": []
+						},
+						"url": {
+							"raw": "{{server}}/api/user/logout",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"user",
+								"logout"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "User Delete",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": []
+						},
+						"url": {
+							"raw": "{{server}}/api/user/delete",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"user",
+								"delete"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Profile Info",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": []
+						},
+						"url": {
+							"raw": "{{server}}/api/user/get/profile/info",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"user",
+								"get",
+								"profile",
+								"info"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Register User",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "fullName",
+									"value": "Vivek Yadav",
+									"type": "text"
+								},
+								{
+									"key": "email",
+									"value": "vivekyadav@gmail.com",
+									"type": "text"
+								},
+								{
+									"key": "password",
+									"value": "vivekyadav",
+									"type": "text"
+								},
+								{
+									"key": "phoneNumber",
+									"value": "8570841028",
+									"type": "text"
+								},
+								{
+									"key": "username",
+									"value": "vivekyadav123",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/user/create",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"user",
+								"create"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "User Update",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "fullName",
+									"value": "Vivek Yadav 123",
+									"type": "text"
+								},
+								{
+									"key": "phoneNumber",
+									"value": "8570841028",
+									"type": "text"
+								},
+								{
+									"key": "email",
+									"value": "vivekadav1@gmail.com",
+									"type": "text"
+								},
+								{
+									"key": "username",
+									"value": "vivekyadavnew",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/user/update",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"user",
+								"update"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Class",
+			"item": [
+				{
+					"name": "Create Class",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "className",
+									"value": "Class D",
+									"type": "text"
+								},
+								{
+									"key": "description",
+									"value": "triple same gigits",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/class/create",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"class",
+								"create"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Class Delete",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "classID",
+									"value": "688d9432171cf24f47e39a10",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/class/delete",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"class",
+								"delete"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Class By ID",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": []
+						},
+						"url": {
+							"raw": "{{server}}/api/class/get/by/id?classID=688d94fb6b186ede0a07f0b8",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"class",
+								"get",
+								"by",
+								"id"
+							],
+							"query": [
+								{
+									"key": "classID",
+									"value": "688d94fb6b186ede0a07f0b8"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Class List",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": []
+						},
+						"url": {
+							"raw": "{{server}}/api/class/get/list?pageNumber=1&pageSize=10",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"class",
+								"get",
+								"list"
+							],
+							"query": [
+								{
+									"key": "pageNumber",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "User Update",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "classID",
+									"value": "688d94fb6b186ede0a07f0b8",
+									"type": "text"
+								},
+								{
+									"key": "className",
+									"value": "Class A",
+									"type": "text"
+								},
+								{
+									"key": "description",
+									"value": "triple same gigits",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/class/update",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"class",
+								"update"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Class Number",
+			"item": [
+				{
+					"name": "Create Number Class",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "classID",
+									"value": "688d97a6a19ff56bc335b7e6",
+									"type": "text"
+								},
+								{
+									"key": "number",
+									"value": "116",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/classNumber/create",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"classNumber",
+								"create"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Class Number Delete",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "classNumberID",
+									"value": "688d984a1d5b85a4f8cc8a2c",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/classNumber/delete",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"classNumber",
+								"delete"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Class Number By ID",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": []
+						},
+						"url": {
+							"raw": "{{server}}/api/classNumber/get/by/id?classNumberID=688d99f3043b89baa58407d6",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"classNumber",
+								"get",
+								"by",
+								"id"
+							],
+							"query": [
+								{
+									"key": "classNumberID",
+									"value": "688d99f3043b89baa58407d6"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Class Number List",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": []
+						},
+						"url": {
+							"raw": "{{server}}/api/classNumber/get/all/class/number?classID=688d97a6a19ff56bc335b7e6",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"classNumber",
+								"get",
+								"all",
+								"class",
+								"number"
+							],
+							"query": [
+								{
+									"key": "classID",
+									"value": "688d97a6a19ff56bc335b7e6"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Number",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "classNumberID",
+									"value": "688d98411d5b85a4f8cc8a24",
+									"type": "text"
+								},
+								{
+									"key": "number",
+									"value": "1134",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/classNumber/update",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"classNumber",
+								"update"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Agent",
+			"item": [
+				{
+					"name": "Agent Login Phone Number And Password",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "password",
+									"value": "vivekyadav",
+									"type": "text"
+								},
+								{
+									"key": "phoneNumber",
+									"value": "8570841028",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/agent/login/phoneNumberAndPassword",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"agent",
+								"login",
+								"phoneNumberAndPassword"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Agent Login Email And Password",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "password",
+									"value": "vivekyadav",
+									"type": "text"
+								},
+								{
+									"key": "email",
+									"value": "vivekyadav@gmail.com",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/agent/login/emailAndPassword",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"agent",
+								"login",
+								"emailAndPassword"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Agent Logout",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": []
+						},
+						"url": {
+							"raw": "{{server}}/api/agent/logout",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"agent",
+								"logout"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create User",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "fullName",
+									"value": "Vivek Yadav",
+									"type": "text"
+								},
+								{
+									"key": "email",
+									"value": "vive5kya6av@gmail.com",
+									"type": "text"
+								},
+								{
+									"key": "password",
+									"value": "vivekyadav",
+									"type": "text"
+								},
+								{
+									"key": "phoneNumber",
+									"value": "857084106",
+									"type": "text"
+								},
+								{
+									"key": "username",
+									"value": "vivekyadav16",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/agent/create/user",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"agent",
+								"create",
+								"user"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get User List",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": []
+						},
+						"url": {
+							"raw": "{{server}}/api/agent/get/user/list?pageNumber=1&pageSize=10",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"agent",
+								"get",
+								"user",
+								"list"
+							],
+							"query": [
+								{
+									"key": "pageNumber",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Profile Info",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": []
+						},
+						"url": {
+							"raw": "{{server}}/api/agent/get/profileInfo",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"agent",
+								"get",
+								"profileInfo"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Agent Update",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "fullName",
+									"value": "Vivek Yadav 123",
+									"type": "text"
+								},
+								{
+									"key": "phoneNumber",
+									"value": "8570841028",
+									"type": "text"
+								},
+								{
+									"key": "email",
+									"value": "vivekadav1@gmail.com",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/agent/update",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"agent",
+								"update"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Admin",
+			"item": [
+				{
+					"name": "Admin Login Phone Number And Password",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "password",
+									"value": "vivekyadav",
+									"type": "text"
+								},
+								{
+									"key": "phoneNumber",
+									"value": "8570841028",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/admin/login/phoneNumberAndPassword",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"login",
+								"phoneNumberAndPassword"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Agent List",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": []
+						},
+						"url": {
+							"raw": "{{server}}/api/admin/get/agent/list?pageNumber=1&pageSize=10",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"get",
+								"agent",
+								"list"
+							],
+							"query": [
+								{
+									"key": "pageNumber",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Agent Update",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "fullName",
+									"value": "Vivek Yadav 123",
+									"type": "text"
+								},
+								{
+									"key": "phoneNumber",
+									"value": "85708410284",
+									"type": "text"
+								},
+								{
+									"key": "email",
+									"value": "vivekadav1@gmail.com4",
+									"type": "text"
+								},
+								{
+									"key": "agentID",
+									"value": "6889e24f07a93b4880385fa1",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/admin/update/agent",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"update",
+								"agent"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get User List",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": []
+						},
+						"url": {
+							"raw": "{{server}}/api/admin/get/user/list?pageNumber=1&pageSize=10",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"get",
+								"user",
+								"list"
+							],
+							"query": [
+								{
+									"key": "pageNumber",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create User",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "fullName",
+									"value": "Vivek Yadav",
+									"type": "text"
+								},
+								{
+									"key": "email",
+									"value": "vivekyad5av6@gmail.com1",
+									"type": "text"
+								},
+								{
+									"key": "password",
+									"value": "vivekyadav661",
+									"type": "text"
+								},
+								{
+									"key": "phoneNumber",
+									"value": "8570841028651",
+									"type": "text"
+								},
+								{
+									"key": "username",
+									"value": "vivekyadav1231",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/admin/create/user",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"create",
+								"user"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "User Update",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "fullName",
+									"value": "Vivek Yadav 123",
+									"type": "text"
+								},
+								{
+									"key": "phoneNumber",
+									"value": "857087345",
+									"type": "text"
+								},
+								{
+									"key": "email",
+									"value": "vivekadav1@gmuail.com",
+									"type": "text"
+								},
+								{
+									"key": "username",
+									"value": "vivekyadavnewu",
+									"type": "text"
+								},
+								{
+									"key": "userID",
+									"value": "688b6cf9c635233103164829",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/admin/update/user",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"update",
+								"user"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Agent",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "fullName",
+									"value": "vivek yadav",
+									"type": "text"
+								},
+								{
+									"key": "phoneNumber",
+									"value": "857084102",
+									"type": "text"
+								},
+								{
+									"key": "email",
+									"value": "vivekadav6@gmail.com4",
+									"type": "text"
+								},
+								{
+									"key": "password",
+									"value": "vivekyadav",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/admin/create/agent",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"create",
+								"agent"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Agent",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "agentID",
+									"value": "6889dea94f9b88a6a62ae1b0",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/admin/delete/agent",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"delete",
+								"agent"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete User",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "userID",
+									"value": "688b6cafc63523310316481b",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/admin/delete/user",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"delete",
+								"user"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Login Email And Password",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "password",
+									"value": "vivekyadav",
+									"type": "text"
+								},
+								{
+									"key": "email",
+									"value": "vivekyadav@gmail.com",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/admin/login/emailAndPassword",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"login",
+								"emailAndPassword"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Logout",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": []
+						},
+						"url": {
+							"raw": "{{server}}/api/admin/logout",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"logout"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Update",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "fullName",
+									"value": "Vivek Yadav 123",
+									"type": "text"
+								},
+								{
+									"key": "phoneNumber",
+									"value": "8570841028",
+									"type": "text"
+								},
+								{
+									"key": "email",
+									"value": "vivekadav1@gmail.com",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{server}}/api/admin/update",
+							"host": [
+								"{{server}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"update"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
