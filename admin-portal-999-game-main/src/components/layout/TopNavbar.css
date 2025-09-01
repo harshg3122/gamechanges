@@ -1,0 +1,143 @@
+.top-navbar {
+    position: fixed;
+    top: 0;
+    left: 280px;
+    right: 0;
+    z-index: 999;
+    border-bottom: 2px solid #22223b;
+    transition: left 0.3s ease;
+    height: 60px;
+    padding: 0 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    max-width: 100vw;
+    overflow-x: hidden;
+    background: #fff;
+}
+
+
+/* Ensure the left section (brand + toggle) and right section (user/profile) are spaced */
+
+.top-navbar>.d-flex.align-items-center {
+    flex: 1 1 auto;
+}
+
+.sidebar-closed~.main-content .top-navbar {
+    left: 70px;
+}
+
+.sidebar-toggle {
+    border: none;
+    background: #4f6ef7;
+    color: #fff;
+    padding: 0.5rem;
+    border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(79, 110, 247, 0.08);
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-toggle:hover {
+    background-color: #3952c4;
+    color: #fff;
+    transform: scale(1.08);
+    box-shadow: 0 4px 16px rgba(79, 110, 247, 0.16);
+}
+
+.sidebar-toggle:focus {
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    outline: none;
+}
+
+.navbar-brand {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #333;
+}
+
+.navbar-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #22223b;
+    letter-spacing: 1px;
+    margin-left: 0.5rem;
+    text-shadow: 0 2px 8px rgba(34, 34, 59, 0.08);
+    font-family: 'Montserrat', 'Segoe UI', Arial, sans-serif;
+    transition: color 0.2s;
+    /* No border or underline */
+    /* Add a subtle glow effect instead */
+    filter: drop-shadow(0 0 6px #c9ada7);
+}
+
+.top-navbar {
+    background: #fff;
+    border-bottom: 2px solid #22223b;
+}
+
+
+/* Optional: On hover, change color for effect */
+
+.navbar-title:hover {
+    color: #4a4e69;
+}
+
+.nav-icon-link {
+    color: #6c757d !important;
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    border-radius: 0.25rem;
+    transition: all 0.2s ease;
+    margin: 0 0.25rem;
+}
+
+.nav-icon-link:hover {
+    color: #495057 !important;
+    background-color: #f8f9fa;
+    transform: translateY(-1px);
+}
+
+.notification-badge {
+    position: absolute;
+    top: -5px;
+    right: 5px;
+    font-size: 0.7rem;
+    min-width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.user-name {
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-left: 0.5rem;
+}
+
+.navbar-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+
+@media (max-width: 768px) {
+    .top-navbar {
+        left: 0;
+        padding: 0 0.5rem;
+    }
+    .user-name {
+        display: none;
+    }
+    .navbar-brand {
+        font-size: 1rem;
+    }
+}
