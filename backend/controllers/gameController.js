@@ -3,7 +3,12 @@ const Round = require('../models/Round');
 const Result = require('../models/Result');
 const User = require('../models/User');
 const Transaction = require('../models/Transaction');
+const SingleDigit = require('../models/SingleDigit');
+const TripleDigit = require('../models/TripleDigit');
+const LockedNumber = require('../models/LockedNumber');
+const Settings = require('../models/Settings');
 const { getCurrentTimeSlot, getTimingInfo } = require('../utils/timeSlots');
+const { updateLockingMechanism, updateLockingMechanismByRoundId, getUnlockedTripleDigit, isNumberLocked } = require('../utils/lockingMechanism');
 // Calculate sum of digits for result logic
 const calculateDigitSum = (number) => {
   return number.toString().split('').reduce((sum, digit) => sum + parseInt(digit), 0);
@@ -82,6 +87,403 @@ const getGameNumbers = async (req, res) => {
       success: false,
       message: 'Error fetching game numbers'
     });
+  }
+};
+
+// Initialize the betting time flow for a round
+// This handles the 50-minute betting window and 10-minute result window
+const initializeBettingTimeFlow = async (roundId) => {
+  try {
+    const round = await Round.findById(roundId);
+    if (!round) {
+      console.error('Round not found for time flow initialization');
+      return;
+    }
+    
+    console.log(`Initializing betting time flow for round ${roundId}`);
+    
+    // Parse the time slot to get start and end times
+    const timeSlot = round.timeSlot; // e.g., "10:00 AM - 11:00 AM"
+    const [startTimeStr, endTimeStr] = timeSlot.split(' - ');
+    
+    // Get current date
+    const currentDate = new Date();
+    const dateStr = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD
+    
+    // Update locking mechanism at the start of the round
+    await updateLockingMechanismByRoundId(roundId);
+    
+    // Schedule the result declaration for 10 minutes before the end of the time slot
+    const endTime = new Date(currentDate);
+    const [endHour, endMinute] = endTimeStr.match(/(\d+):(\d+)\s*(AM|PM)/i).slice(1, 3);
+    let hour = parseInt(endHour);
+    const minute = parseInt(endMinute);
+    const ampm = endTimeStr.match(/(AM|PM)/i)[0].toUpperCase();
+    
+    // Convert to 24-hour format
+    if (ampm === 'PM' && hour !== 12) hour += 12;
+    if (ampm === 'AM' && hour === 12) hour = 0;
+    
+    endTime.setHours(hour, minute, 0, 0);
+    
+    // Set result declaration time to 10 minutes before end time
+    const resultTime = new Date(endTime);
+    resultTime.setMinutes(resultTime.getMinutes() - 10);
+    
+    // Calculate time until result declaration
+    const now = new Date();
+    const timeUntilResult = resultTime.getTime() - now.getTime();
+    
+    if (timeUntilResult > 0) {
+      console.log(`Scheduling result declaration for ${resultTime.toLocaleTimeString()}`);
+      
+      // Schedule result declaration
+      setTimeout(async () => {
+        try {
+          console.log(`Auto-declaring result for round ${roundId}`);
+          
+          // Check if result already exists
+          const existingResult = await Result.findOne({ roundId });
+          if (existingResult) {
+            console.log(`Result already exists for round ${roundId}`);
+            return;
+          }
+          
+          try {
+            // Get an unlocked triple digit for result using our utility function
+            const selectedTriple = await getUnlockedTripleDigit(roundId);
+            
+            // Calculate single digit result
+            const sum = selectedTriple.split('').reduce((acc, digit) => acc + parseInt(digit), 0);
+            const singleDigit = (sum % 10).toString();
+            
+            // Check if the resulting single digit is locked
+            const singleDigitLocked = await isNumberLocked(roundId, 'single', singleDigit);
+            
+            if (singleDigitLocked) {
+              console.error(`Resulting single digit ${singleDigit} is locked, trying another triple`);
+              // Try again with another triple digit
+              initializeBettingTimeFlow(roundId);
+              return;
+            }
+            
+            // Create result
+            const result = new Result({
+              roundId,
+              date: dateStr,
+              timeSlot,
+              tripleDigitNumber: selectedTriple,
+              singleDigitResult: singleDigit
+            });
+            
+            await result.save();
+            
+            // Update round status
+            await Round.findByIdAndUpdate(roundId, { status: 'completed' });
+            
+            console.log(`Result declared: Triple ${selectedTriple}, Single ${singleDigit}`);
+          } catch (error) {
+            console.error('Error getting unlocked triple digit:', error.message);
+            return;
+          }
+          
+          // Create result
+          const result = new Result({
+            roundId,
+            date: dateStr,
+            timeSlot,
+            tripleDigitNumber: selectedTriple,
+            singleDigitResult: singleDigit
+          });
+          
+          await result.save();
+          
+          // Update round status
+          await Round.findByIdAndUpdate(roundId, { status: 'completed' });
+          
+          console.log(`Result declared: Triple ${selectedTriple}, Single ${singleDigit}`);
+          
+        } catch (error) {
+          console.error('Error in auto result declaration:', error);
+        }
+      }, timeUntilResult);
+    } else {
+      console.log('Result time already passed, declaring result immediately');
+      // Declare result immediately if time has already passed
+      // This is similar to the code above, but executes immediately
+      
+      // Check if result already exists
+      const existingResult = await Result.findOne({ roundId });
+      if (existingResult) {
+        console.log(`Result already exists for round ${roundId}`);
+        return;
+      }
+      
+      try {
+        // Get an unlocked triple digit for result using our utility function
+        const selectedTriple = await getUnlockedTripleDigit(roundId);
+        
+        // Calculate single digit result
+        const sum = selectedTriple.split('').reduce((acc, digit) => acc + parseInt(digit), 0);
+        const singleDigit = (sum % 10).toString();
+        
+        // Check if the resulting single digit is locked
+        const singleDigitLocked = await isNumberLocked(roundId, 'single', singleDigit);
+        
+        if (singleDigitLocked) {
+          console.error(`Resulting single digit ${singleDigit} is locked, trying another triple`);
+          // Try again with another triple digit
+          initializeBettingTimeFlow(roundId);
+          return;
+        }
+      } catch (error) {
+        console.error('Error getting unlocked triple digit:', error.message);
+        return;
+      }
+      
+      // Create result
+      const result = new Result({
+        roundId,
+        date: dateStr,
+        timeSlot,
+        tripleDigitNumber: selectedTriple,
+        singleDigitResult: singleDigit
+      });
+      
+      await result.save();
+      
+      // Update round status
+      await Round.findByIdAndUpdate(roundId, { status: 'completed' });
+      
+      console.log(`Result declared: Triple ${selectedTriple}, Single ${singleDigit}`);
+    }
+    } catch (error) {
+      console.error('Error in auto result declaration:', error);
+    }
+
+    // Initialize by locking 50% of single digits and 50% of triple digits
+    await updateLockingMechanismByRoundId(roundId);
+    
+    // Update round status to 'betting'
+    round.status = 'betting';
+    await round.save();
+    
+    console.log(`Betting time flow initialized for round ${roundId}, timeSlot ${timeSlot}`);
+    
+    // Set timer for the end of betting window (50 minutes)
+    const bettingWindowMs = 50 * 60 * 1000; // 50 minutes in milliseconds
+    setTimeout(async () => {
+      try {
+        // Update round status to 'result_pending'
+        const updatedRound = await Round.findById(roundId);
+        if (updatedRound) {
+          updatedRound.status = 'result_pending';
+          await updatedRound.save();
+          console.log(`Betting window closed for round ${roundId}, entering result window`);
+          
+          // Set timer for auto-selection if admin hasn't chosen (9 minutes after betting window closes)
+          const adminSelectionWindowMs = 9 * 60 * 1000; // 9 minutes in milliseconds
+          setTimeout(async () => {
+            try {
+              // Check if result has been declared
+              const result = await Result.findOne({ roundId });
+              if (!result) {
+                console.log(`Admin did not select result for round ${roundId}, auto-selecting...`);
+                await autoSelectResult(roundId);
+              }
+            } catch (error) {
+              console.error('Error in admin selection window timeout:', error);
+            }
+          }, adminSelectionWindowMs);
+        }
+      } catch (error) {
+        console.error('Error closing betting window:', error);
+      }
+    }, bettingWindowMs);
+    
+  } catch (error) {
+    console.error('Error initializing betting time flow:', error);
+  }
+};
+
+// Auto-select a result if admin hasn't chosen one
+const autoSelectResult = async (roundId) => {
+  try {
+    const round = await Round.findById(roundId);
+    if (!round) {
+      console.error('Round not found for auto-selection');
+      return;
+    }
+    
+    const date = round.gameDate ? round.gameDate.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const timeSlot = round.timeSlot;
+    
+    // Initialize the locking mechanism for this round
+    await updateLockingMechanismByRoundId(roundId);
+    
+    let validTripleDigit;
+    let resultingSingleDigit;
+    
+    try {
+      // Get an unlocked triple digit
+      validTripleDigit = await getUnlockedTripleDigit(roundId);
+      
+      // Calculate the resulting single digit
+      const sum = validTripleDigit.split('').reduce((acc, digit) => acc + parseInt(digit, 10), 0);
+      resultingSingleDigit = (sum % 10).toString();
+      
+      // Check if the resulting single digit is locked
+      const singleDigitLocked = await isNumberLocked(roundId, 'single', resultingSingleDigit);
+      
+      if (singleDigitLocked) {
+        console.error(`Resulting single digit ${resultingSingleDigit} is locked, cannot auto-select result`);
+        return;
+      }
+    } catch (error) {
+      console.error('Error finding unlocked triple digit for auto-selection:', error.message);
+      return;
+    }
+    
+    if (!validTripleDigit) {
+      console.error('Could not find a valid triple digit that results in an unlocked single digit');
+      return;
+    }
+    
+    // Create the result
+    const result = new Result({
+      roundId,
+      date,
+      timeSlot,
+      tripleDigitNumber: validTripleDigit,
+      singleDigitResult: resultingSingleDigit,
+      autoSelected: true
+    });
+    
+    await result.save();
+    
+    // Update round status
+    round.status = 'completed';
+    await round.save();
+    
+    console.log(`Auto-selected result for round ${roundId}: Triple digit ${validTripleDigit} results in single digit ${resultingSingleDigit}`);
+    
+  } catch (error) {
+    console.error('Error auto-selecting result:', error);
+  }
+};
+
+// Update lock status of numbers based on betting thresholds
+const updateNumberLockStatus = async (roundId) => {
+  try {
+    // Get the round information
+    const round = await Round.findById(roundId);
+    if (!round) {
+      console.error('Round not found for lock status update');
+      return;
+    }
+
+    // Get the settings to determine the lock threshold percentage
+    const settings = await Settings.findOne({}) || { numberLockThreshold: 30 }; // Default to 30% if not set
+    const lockThresholdPercentage = settings.numberLockThreshold;
+    
+    // Get the date and time slot from the round
+    const currentDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD format
+    const timeSlot = round.timeSlot;
+    
+    // Get all bets for this round
+    const bets = await Bet.find({ roundId: round._id });
+    
+    // Calculate total bet amount for this round
+    const totalBetAmount = bets.reduce((total, bet) => total + bet.betAmount, 0);
+    
+    if (totalBetAmount <= 0) {
+      console.log('No bets placed yet, skipping lock status update');
+      return;
+    }
+    
+    // Group bets by number and calculate total amount for each
+    const singleDigitBets = {};
+    const tripleDigitBets = {};
+    
+    bets.forEach(bet => {
+      const number = bet.selectedNumber;
+      
+      // Handle single digit bets (Class A)
+      if (bet.gameClass === 'A' && number.length === 1) {
+        singleDigitBets[number] = (singleDigitBets[number] || 0) + bet.betAmount;
+      }
+      
+      // Handle triple digit bets (Class B, C, D)
+      if ((bet.gameClass === 'B' || bet.gameClass === 'C' || bet.gameClass === 'D') && number.length === 3) {
+        tripleDigitBets[number] = (tripleDigitBets[number] || 0) + bet.betAmount;
+      }
+    });
+    
+    // Initialize the locking mechanism for this round
+    await updateLockingMechanismByRoundId(roundId);
+    
+    // Get existing locked numbers for this round
+    const lockedNumbers = await LockedNumber.find({ roundId });
+    
+    // Update single digit lock status
+    for (const [digit, betAmount] of Object.entries(singleDigitBets)) {
+      // Calculate percentage of total bets for this digit
+      const betPercentage = (betAmount / totalBetAmount) * 100;
+      
+      // Check if percentage exceeds threshold
+      const shouldLock = betPercentage >= lockThresholdPercentage;
+      
+      // Find existing locked number record
+      let lockedNumber = lockedNumbers.find(ln => ln.numberType === 'single' && ln.number === digit);
+      
+      if (!lockedNumber && shouldLock) {
+        // Create new locked number record if it should be locked
+        lockedNumber = new LockedNumber({
+          roundId,
+          numberType: 'single',
+          number: digit,
+          reason: 'bet_threshold_exceeded'
+        });
+        await lockedNumber.save();
+      } else if (lockedNumber && !shouldLock && lockedNumber.reason === 'bet_threshold_exceeded') {
+        // Remove lock if it's no longer needed and was set by this function
+        await LockedNumber.findByIdAndDelete(lockedNumber._id);
+      }
+      
+      console.log(`Single digit ${digit} lock status updated to ${shouldLock} (${betPercentage.toFixed(2)}% of bets)`);
+    }
+    
+    // Update triple digit lock status
+    for (const [number, betAmount] of Object.entries(tripleDigitBets)) {
+      // Calculate percentage of total bets for this number
+      const betPercentage = (betAmount / totalBetAmount) * 100;
+      
+      // Check if percentage exceeds threshold
+      const shouldLock = betPercentage >= lockThresholdPercentage;
+      
+      // Find existing locked number record
+      let lockedNumber = lockedNumbers.find(ln => ln.numberType === 'triple' && ln.number === number);
+      
+      if (!lockedNumber && shouldLock) {
+        // Create new locked number record if it should be locked
+        lockedNumber = new LockedNumber({
+          roundId,
+          numberType: 'triple',
+          number,
+          reason: 'bet_threshold_exceeded'
+        });
+        await lockedNumber.save();
+      } else if (lockedNumber && !shouldLock && lockedNumber.reason === 'bet_threshold_exceeded') {
+        // Remove lock if it's no longer needed and was set by this function
+        await LockedNumber.findByIdAndDelete(lockedNumber._id);
+      }
+      
+      console.log(`Triple digit ${number} lock status updated to ${shouldLock} (${betPercentage.toFixed(2)}% of bets)`);
+    }
+    
+    console.log(`Lock status update completed for round ${roundId}`);
+  } catch (error) {
+    console.error('Error updating number lock status:', error);
   }
 };
 
@@ -209,7 +611,10 @@ const placeBet = async (req, res) => {
     const timingInfo = getTimingInfo();
     
     // Get or create current round
-    let currentRound = await Round.findOne({ status: 'active' });
+    let currentRound = await Round.findOne({ 
+      timeSlot: currentTimeSlot.slot,
+      status: 'active' 
+    });
     if (!currentRound) {
       // Generate a unique round number
       const roundCount = await Round.countDocuments();
@@ -219,6 +624,9 @@ const placeBet = async (req, res) => {
         status: 'active'
       });
       await currentRound.save();
+      
+      // Initialize the betting time flow for the new round
+      initializeBettingTimeFlow(currentRound._id);
     }
 
     // Create multiple bets
@@ -261,6 +669,9 @@ const placeBet = async (req, res) => {
 
     console.log(`Balance updated: ${previousBalance} - ${totalBetAmount} = ${user.walletBalance}`);
     await user.save();
+    
+    // Update number lock status after placing bets
+    await updateNumberLockStatus(currentRound._id);
 
     res.status(201).json({
       success: true,
@@ -588,5 +999,8 @@ module.exports = {
   getResults,
   getResultForTimeSlot,
   generateWinningNumber,
-  autoGenerateResults
+  autoGenerateResults,
+  updateNumberLockStatus,
+  initializeBettingTimeFlow,
+  autoSelectResult
 };

@@ -180,7 +180,8 @@ const getAppSettings = async (req, res) => {
         maxBetAmount: 10000,
         bettingEnabled: true,
         maintenanceMode: false,
-        withdrawalEnabled: true
+        withdrawalEnabled: true,
+        numberLockThreshold: 30
       });
     }
 
