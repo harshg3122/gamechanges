@@ -131,14 +131,35 @@ const Results = ({ roundId }) => {
 
   // Mock data for testing
   const loadMockData = () => {
+    // Generate current time slot dynamically
+    const now = new Date();
+    const currentHour = now.getHours();
+    const nextHour = (currentHour + 1) % 24;
+
+    // Convert to 12-hour format with AM/PM
+    const getCurrentTimeSlotWithAmPm = () => {
+      const currentAmPm = currentHour >= 12 ? "PM" : "AM";
+      const nextAmPm = nextHour >= 12 ? "PM" : "AM";
+      const displayCurrentHour =
+        currentHour > 12
+          ? currentHour - 12
+          : currentHour === 0
+          ? 12
+          : currentHour;
+      const displayNextHour =
+        nextHour > 12 ? nextHour - 12 : nextHour === 0 ? 12 : nextHour;
+
+      return `${displayCurrentHour}:00 ${currentAmPm} - ${displayNextHour}:00 ${nextAmPm}`;
+    };
+
     const mockCurrentRound = {
       _id: "674e1234567890abcd123456",
-      timeSlot: "5:00 PM - 6:00 PM",
+      timeSlot: getCurrentTimeSlotWithAmPm(),
       gameClass: "A",
       status: "BETTING_OPEN",
       timing: {
         gameStatus: "BETTING_OPEN",
-        remainingMinutes: 15,
+        remainingMinutes: 60 - now.getMinutes(), // Actual remaining minutes
       },
     };
 
@@ -230,14 +251,20 @@ const Results = ({ roundId }) => {
       }
     }, 30000);
 
-    // Update current time every second
+    // Update current time every second and refresh data every minute to update time slot
     const timeInterval = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
 
+    // Update time slot every minute
+    const slotInterval = setInterval(() => {
+      fetchData(); // This will update the time slot display
+    }, 60000);
+
     return () => {
       clearInterval(interval);
       clearInterval(timeInterval);
+      clearInterval(slotInterval);
     };
   }, [fetchData, result]);
 
@@ -305,33 +332,29 @@ const Results = ({ roundId }) => {
     return slotStart;
   };
 
-  // Format time slot to show hour-hour format (e.g., 5-6, 6-7) in IST
+  // Get current time slot based on actual current time
+  const getCurrentTimeSlot = () => {
+    const now = new Date();
+    const currentHour = now.getHours(); // 24-hour format
+    const nextHour = (currentHour + 1) % 24;
+
+    // Convert to 12-hour format for display
+    const displayCurrentHour =
+      currentHour > 12
+        ? currentHour - 12
+        : currentHour === 0
+        ? 12
+        : currentHour;
+    const displayNextHour =
+      nextHour > 12 ? nextHour - 12 : nextHour === 0 ? 12 : nextHour;
+
+    return `${displayCurrentHour}-${displayNextHour}`;
+  };
+
+  // Format time slot to show current hour range
   const formatTimeSlot = (timeSlotStr) => {
-    if (!timeSlotStr) return "N/A";
-    const match = timeSlotStr.match(
-      /^(\d{1,2}):(\d{2})\s*(AM|PM)\s*-\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i
-    );
-    if (!match) return timeSlotStr;
-
-    let startHour = parseInt(match[1], 10);
-    const startAmPm = match[3].toUpperCase();
-    let endHour = parseInt(match[4], 10);
-    const endAmPm = match[6].toUpperCase();
-
-    // Convert to 24-hour format first
-    if (startAmPm === "PM" && startHour !== 12) startHour += 12;
-    if (startAmPm === "AM" && startHour === 12) startHour = 0;
-    if (endAmPm === "PM" && endHour !== 12) endHour += 12;
-    if (endAmPm === "AM" && endHour === 12) endHour = 0;
-
-    // Convert back to 12-hour format for display - simplified
-    const displayStartHour =
-      startHour > 12 ? startHour - 12 : startHour === 0 ? 12 : startHour;
-    const displayEndHour =
-      endHour > 12 ? endHour - 12 : endHour === 0 ? 12 : endHour;
-
-    // Show simple hour-hour format for current time
-    return `${displayStartHour}-${displayEndHour}`;
+    // Always show current time slot regardless of input
+    return getCurrentTimeSlot();
   };
 
   // Only show button after 50 minutes from slot start
@@ -641,6 +664,8 @@ const Results = ({ roundId }) => {
               minute: "2-digit",
               second: "2-digit",
             })}
+            {" | Current Slot: "}
+            <strong>{getCurrentTimeSlot()}</strong>
           </small>
         </div>
         <div className="d-flex gap-2">
