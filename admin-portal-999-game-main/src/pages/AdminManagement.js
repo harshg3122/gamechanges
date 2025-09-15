@@ -176,6 +176,49 @@ const AdminManagement = () => {
     setShowEditModal(true);
   };
 
+  // Submit edit agent
+  const submitEditAgent = async (e) => {
+    e.preventDefault();
+    try {
+      setLoading(true);
+
+      const formData = new FormData(e.target);
+      const payload = {
+        fullName: formData.get("fullName"),
+        mobile: formData.get("mobile"),
+        commissionRate: parseInt(formData.get("commissionRate")),
+        isActive: formData.get("status") === "active",
+      };
+
+      const response = await adminAPI.updateAgent(selectedAgent._id, payload);
+
+      if (response.data.success) {
+        await loadAgents(); // Reload the list
+        setShowEditModal(false);
+        showAlert(
+          setAlert,
+          "success",
+          `Agent ${payload.fullName} has been updated successfully!`
+        );
+      } else {
+        showAlert(
+          setAlert,
+          "danger",
+          response.data.message || "Failed to update agent"
+        );
+      }
+    } catch (error) {
+      console.error("Error updating agent:", error);
+      showAlert(
+        setAlert,
+        "danger",
+        error.response?.data?.message || "Error updating agent"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Handle delete agent
   const handleDelete = (agent) => {
     setSelectedAgent(agent);
@@ -215,6 +258,57 @@ const AdminManagement = () => {
       confirmPassword: "",
     });
     setShowPasswordModal(true);
+  };
+
+  // Submit change password
+  const submitChangePassword = async (e) => {
+    e.preventDefault();
+    try {
+      setLoading(true);
+
+      if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+        showAlert(setAlert, "danger", "New passwords do not match");
+        return;
+      }
+
+      if (passwordForm.newPassword.length < 6) {
+        showAlert(
+          setAlert,
+          "danger",
+          "New password must be at least 6 characters"
+        );
+        return;
+      }
+
+      const response = await adminAPI.changeAgentPassword({
+        agentId: selectedAgent._id,
+        newPassword: passwordForm.newPassword,
+      });
+
+      if (response.data.success) {
+        setShowPasswordModal(false);
+        showAlert(
+          setAlert,
+          "success",
+          `Password for ${selectedAgent.fullName} has been changed successfully!`
+        );
+      } else {
+        showAlert(
+          setAlert,
+          "danger",
+          response.data.message || "Failed to change password"
+        );
+      }
+    } catch (error) {
+      console.error("Error changing password:", error);
+      showAlert(
+        setAlert,
+        "danger",
+        error.response?.data?.message || "Error changing password"
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Generate referral code
@@ -768,14 +862,16 @@ const AdminManagement = () => {
         </Modal.Header>
         <Modal.Body>
           {selectedAgent && (
-            <Form>
+            <Form onSubmit={submitEditAgent}>
               <Row>
                 <Col md={6}>
                   <Form.Group className="mb-3">
                     <Form.Label>Full Name</Form.Label>
                     <Form.Control
                       type="text"
+                      name="fullName"
                       defaultValue={selectedAgent.fullName}
+                      required
                     />
                   </Form.Group>
                 </Col>
@@ -784,7 +880,9 @@ const AdminManagement = () => {
                     <Form.Label>Mobile</Form.Label>
                     <Form.Control
                       type="tel"
+                      name="mobile"
                       defaultValue={selectedAgent.mobile}
+                      required
                     />
                   </Form.Group>
                 </Col>
@@ -795,9 +893,11 @@ const AdminManagement = () => {
                     <Form.Label>Commission Rate (%)</Form.Label>
                     <Form.Control
                       type="number"
+                      name="commissionRate"
                       min="0"
                       max="100"
                       defaultValue={selectedAgent.commissionRate || 5}
+                      required
                     />
                   </Form.Group>
                 </Col>
@@ -805,6 +905,7 @@ const AdminManagement = () => {
                   <Form.Group className="mb-3">
                     <Form.Label>Status</Form.Label>
                     <Form.Select
+                      name="status"
                       defaultValue={
                         selectedAgent.isActive ? "active" : "inactive"
                       }
@@ -815,15 +916,20 @@ const AdminManagement = () => {
                   </Form.Group>
                 </Col>
               </Row>
+              <Modal.Footer>
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowEditModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button variant="primary" type="submit" disabled={loading}>
+                  {loading ? "Saving..." : "Save Changes"}
+                </Button>
+              </Modal.Footer>
             </Form>
           )}
         </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowEditModal(false)}>
-            Cancel
-          </Button>
-          <Button variant="primary">Save Changes</Button>
-        </Modal.Footer>
       </Modal>
 
       {/* Delete Confirmation Modal */}
@@ -864,20 +970,7 @@ const AdminManagement = () => {
               <p className="mb-3">
                 <strong>Agent:</strong> {selectedAgent.fullName}
               </p>
-              <Form>
-                <Form.Group className="mb-3">
-                  <Form.Label>Current Password</Form.Label>
-                  <Form.Control
-                    type="password"
-                    value={passwordForm.currentPassword}
-                    onChange={(e) =>
-                      setPasswordForm({
-                        ...passwordForm,
-                        currentPassword: e.target.value,
-                      })
-                    }
-                  />
-                </Form.Group>
+              <Form onSubmit={submitChangePassword}>
                 <Form.Group className="mb-3">
                   <Form.Label>New Password</Form.Label>
                   <Form.Control
@@ -889,6 +982,8 @@ const AdminManagement = () => {
                         newPassword: e.target.value,
                       })
                     }
+                    required
+                    minLength={6}
                   />
                 </Form.Group>
                 <Form.Group className="mb-3">
@@ -902,21 +997,25 @@ const AdminManagement = () => {
                         confirmPassword: e.target.value,
                       })
                     }
+                    required
+                    minLength={6}
                   />
                 </Form.Group>
+                <Modal.Footer>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowPasswordModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button variant="primary" type="submit" disabled={loading}>
+                    {loading ? "Updating..." : "Update Password"}
+                  </Button>
+                </Modal.Footer>
               </Form>
             </div>
           )}
         </Modal.Body>
-        <Modal.Footer>
-          <Button
-            variant="secondary"
-            onClick={() => setShowPasswordModal(false)}
-          >
-            Cancel
-          </Button>
-          <Button variant="primary">Update Password</Button>
-        </Modal.Footer>
       </Modal>
 
       {/* Success Modal for New Agent */}

@@ -31,19 +31,9 @@ const agentSchema = new mongoose.Schema(
 
 const Agent = mongoose.model("Agent", agentSchema);
 
-// Generate unique referral code
-const generateReferralCode = () => {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let result = "";
-  for (let i = 0; i < 8; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-};
-
 // Health check
 app.get("/health", (req, res) => {
-  res.json({ status: "OK", message: "Simple Agent server is running" });
+  res.json({ status: "OK", message: "Minimal server is running" });
 });
 
 // Get all agents
@@ -84,18 +74,6 @@ app.put("/api/admin-panel/agents/:id", async (req, res) => {
       });
     }
 
-    // Check if mobile already exists for other agents
-    const existingAgent = await Agent.findOne({
-      mobile,
-      _id: { $ne: id },
-    });
-    if (existingAgent) {
-      return res.status(400).json({
-        success: false,
-        message: "Mobile number already exists for another agent",
-      });
-    }
-
     const agent = await Agent.findByIdAndUpdate(
       id,
       {
@@ -119,14 +97,10 @@ app.put("/api/admin-panel/agents/:id", async (req, res) => {
       fullName: agent.fullName,
     });
 
-    // Return agent without password
-    const agentResponse = agent.toObject();
-    delete agentResponse.password;
-
     res.json({
       success: true,
       message: "Agent updated successfully",
-      data: { agent: agentResponse },
+      data: { agent },
     });
   } catch (error) {
     console.error("Update agent error:", error);
@@ -209,94 +183,9 @@ app.post("/api/admin-panel/agents/:id/change-password", async (req, res) => {
   }
 });
 
-// Create new agent
-app.post("/api/admin-panel/agents", async (req, res) => {
-  try {
-    const { fullName, mobile, password, referralCode } = req.body;
-
-    console.log("📥 POST /api/admin-panel/agents", {
-      fullName,
-      mobile,
-      referralCode,
-    });
-
-    if (!fullName || !mobile || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "Full name, mobile, and password are required",
-      });
-    }
-
-    // Check if mobile already exists
-    const existingAgent = await Agent.findOne({ mobile });
-    if (existingAgent) {
-      return res.status(400).json({
-        success: false,
-        message: "Mobile number already exists",
-      });
-    }
-
-    // Use provided referral code or generate one
-    let finalReferralCode = referralCode;
-    if (!finalReferralCode) {
-      let attempts = 0;
-      do {
-        finalReferralCode = generateReferralCode();
-        attempts++;
-        if (attempts > 10) break;
-      } while (await Agent.findOne({ referralCode: finalReferralCode }));
-    } else {
-      // Check if provided referral code already exists
-      const existingCode = await Agent.findOne({
-        referralCode: finalReferralCode,
-      });
-      if (existingCode) {
-        return res.status(400).json({
-          success: false,
-          message: "Referral code already exists",
-        });
-      }
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create agent
-    const agent = new Agent({
-      fullName,
-      mobile,
-      password: hashedPassword,
-      referralCode: finalReferralCode,
-      isActive: true,
-      commissionRate: 5,
-    });
-
-    await agent.save();
-
-    console.log("✅ Agent created successfully:", {
-      id: agent._id,
-      fullName: agent.fullName,
-      referralCode: agent.referralCode,
-    });
-
-    // Return agent without password
-    const agentResponse = agent.toObject();
-    delete agentResponse.password;
-
-    res.status(201).json({
-      success: true,
-      message: "Agent created successfully",
-      data: { agent: agentResponse },
-    });
-  } catch (error) {
-    console.error("Create agent error:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
 // Start server
 app.listen(PORT, async () => {
-  console.log(`🚀 Simple Agent Server running on port ${PORT}`);
+  console.log(`🚀 Minimal Server running on port ${PORT}`);
   console.log(`🔗 Health: http://localhost:${PORT}/health`);
   console.log(`👥 Agents API: http://localhost:${PORT}/api/admin-panel/agents`);
 

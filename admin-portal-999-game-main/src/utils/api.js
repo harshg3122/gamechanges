@@ -2,7 +2,15 @@ import axios from "axios";
 
 // Base API configuration
 const API_BASE_URL =
-  process.env.REACT_APP_API_URL || "http://localhost:3001/api";
+  process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+
+// Ensure a development token exists locally to access admin APIs during local dev
+if (typeof window !== "undefined") {
+  const existingToken = localStorage.getItem("admin_token");
+  if (!existingToken) {
+    localStorage.setItem("admin_token", `dev-token-${Date.now()}`);
+  }
+}
 
 // Create axios instance
 const api = axios.create({
