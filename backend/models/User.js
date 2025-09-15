@@ -34,6 +34,12 @@ const userSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    agentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Agent",
+      required: false,
+      index: true,
+    },
     passwordHash: {
       type: String,
       required: [true, "Password is required"],

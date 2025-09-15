@@ -92,7 +92,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (credentials) => {
     try {
-      console.log("🚀 Login attempt:", credentials);
+      console.log("🚀 Admin login attempt:", credentials);
 
       const response = await authAPI.adminLogin(credentials);
       console.log("✅ API Response:", response.data);
@@ -109,54 +109,26 @@ export const AuthProvider = ({ children }) => {
 
         localStorage.setItem("admin_token", token);
         localStorage.setItem("admin_token_data", JSON.stringify(tokenData));
-        localStorage.setItem("admin_user", JSON.stringify(userData));
+        localStorage.setItem(
+          "admin_user",
+          JSON.stringify({ ...userData, role: "admin" })
+        );
 
-        setUser(userData);
-        console.log("✅ Login successful, token valid for 1 month");
+        setUser({ ...userData, role: "admin" });
+        console.log("✅ Admin login successful, token valid for 1 month");
         return { success: true };
       } else {
         return {
           success: false,
-          error: response.data?.message || "Login failed",
+          error: response.data?.message || "Invalid credentials",
         };
       }
     } catch (error) {
-      console.warn("❌ Admin login failed, trying agent login...");
-      // Try agent login with identifier (email or mobile)
-      try {
-        const agentResp = await agentAPI.login({
-          identifier: credentials.username,
-          password: credentials.password,
-        });
-        if (agentResp.data?.success) {
-          const { token, agent } = agentResp.data.data
-            ? agentResp.data.data
-            : agentResp.data;
-          const tokenData = {
-            token,
-            timestamp: Date.now(),
-            expiresIn: 30 * 24 * 60 * 60 * 1000,
-          };
-          const userData = {
-            _id: agent._id,
-            name: agent.fullName,
-            email: agent.email,
-            role: "agent",
-            referralCode: agent.referralCode,
-          };
-          localStorage.setItem("admin_token", token);
-          localStorage.setItem("admin_token_data", JSON.stringify(tokenData));
-          localStorage.setItem("admin_user", JSON.stringify(userData));
-          setUser(userData);
-          return { success: true };
-        }
-      } catch (e2) {
-        console.error(
-          "❌ Agent login failed:",
-          e2?.response?.data || e2.message
-        );
-        return { success: false, error: "Invalid credentials" };
-      }
+      console.error("❌ Admin login error:", error);
+      return {
+        success: false,
+        error: error.response?.data?.message || "Invalid credentials",
+      };
     }
   };
 

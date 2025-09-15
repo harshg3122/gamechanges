@@ -20,12 +20,10 @@ exports.loginAgent = async (req, res) => {
       req.body.email;
     const { password } = req.body;
     if (!identifier || !password) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Identifier and password are required",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Identifier and password are required",
+      });
     }
     const agent = await Agent.findOne({
       $or: [
@@ -96,13 +94,11 @@ exports.addUser = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Validation failed",
-          data: errors.array(),
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        data: errors.array(),
+      });
     }
     const { fullName, mobile, password, referralCode } = req.body;
     const existing = await User.findOne({ mobile });
@@ -113,13 +109,16 @@ exports.addUser = async (req, res) => {
     }
     const hash = await bcrypt.hash(password, 10);
     const agentId = req.user.id;
+    // Create a username from mobile if not provided
+    const username = `u${mobile}`;
     const user = new User({
-      fullName,
-      mobile,
-      password: hash,
-      referralCode,
+      username,
+      mobileNumber: mobile,
+      passwordHash: hash,
+      referral: referralCode,
       agentId,
       balance: 0,
+      isActive: true,
     });
     await user.save();
     await Agent.findByIdAndUpdate(agentId, { $push: { users: user._id } });
