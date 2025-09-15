@@ -169,8 +169,8 @@ const Results = ({ roundId }) => {
         totalBetAmount: 45000,
         lockedSingleDigitEntries: 5,
         totalSingleDigitEntries: 10,
-        lockedTripleDigitEntries: 500,
-        totalTripleDigitEntries: 1000,
+        lockedTripleDigitEntries: 12,
+        totalTripleDigitEntries: 15,
       },
       singleDigitTable: [
         { number: 0, tokens: 5200, lock: false },
@@ -186,17 +186,17 @@ const Results = ({ roundId }) => {
       ],
       tripleDigitTable: [
         {
-          number: 123,
+          number: 987,
           classType: "A",
-          tokens: 1200,
-          sumDigits: 6,
-          onesDigit: 6,
-          lock: false,
+          tokens: 1680,
+          sumDigits: 24,
+          onesDigit: 4,
+          lock: true,
         },
         {
-          number: 456,
-          classType: "B",
-          tokens: 980,
+          number: 654,
+          classType: "C",
+          tokens: 1420,
           sumDigits: 15,
           onesDigit: 5,
           lock: true,
@@ -207,14 +207,38 @@ const Results = ({ roundId }) => {
           tokens: 1500,
           sumDigits: 24,
           onesDigit: 4,
-          lock: false,
+          lock: true,
         },
         {
-          number: 234,
-          classType: "C",
-          tokens: 750,
+          number: 890,
+          classType: "A",
+          tokens: 1350,
+          sumDigits: 17,
+          onesDigit: 7,
+          lock: true,
+        },
+        {
+          number: 432,
+          classType: "B",
+          tokens: 1280,
           sumDigits: 9,
           onesDigit: 9,
+          lock: true,
+        },
+        {
+          number: 123,
+          classType: "A",
+          tokens: 1200,
+          sumDigits: 6,
+          onesDigit: 6,
+          lock: true,
+        },
+        {
+          number: 198,
+          classType: "A",
+          tokens: 1150,
+          sumDigits: 18,
+          onesDigit: 8,
           lock: true,
         },
         {
@@ -223,6 +247,62 @@ const Results = ({ roundId }) => {
           tokens: 1100,
           sumDigits: 18,
           onesDigit: 8,
+          lock: true,
+        },
+        {
+          number: 678,
+          classType: "C",
+          tokens: 1050,
+          sumDigits: 21,
+          onesDigit: 1,
+          lock: true,
+        },
+        {
+          number: 765,
+          classType: "C",
+          tokens: 950,
+          sumDigits: 18,
+          onesDigit: 8,
+          lock: true,
+        },
+        {
+          number: 345,
+          classType: "B",
+          tokens: 920,
+          sumDigits: 12,
+          onesDigit: 2,
+          lock: true,
+        },
+        {
+          number: 456,
+          classType: "B",
+          tokens: 980,
+          sumDigits: 15,
+          onesDigit: 5,
+          lock: true,
+        },
+        {
+          number: 321,
+          classType: "B",
+          tokens: 870,
+          sumDigits: 6,
+          onesDigit: 6,
+          lock: false,
+        },
+        {
+          number: 901,
+          classType: "A",
+          tokens: 800,
+          sumDigits: 10,
+          onesDigit: 0,
+          lock: false,
+        },
+        {
+          number: 234,
+          classType: "C",
+          tokens: 750,
+          sumDigits: 9,
+          onesDigit: 9,
           lock: false,
         },
       ],
@@ -457,15 +537,29 @@ const Results = ({ roundId }) => {
     setViewLoading(false);
   };
 
-  // Auto-declare result in the last 10 minutes
+  // Auto-declare result in the last minute
   const handleAutoDeclareResult = async () => {
     try {
-      // Find an unlocked triple digit
-      const unlockedTripleDigit = resultTables?.tripleDigitTable?.find(
-        (item) => !item.lock
-      );
-      if (unlockedTripleDigit) {
-        await handleDeclareResult(unlockedTripleDigit.number);
+      // Only auto-declare in the last minute
+      if (!isInLastMinute()) {
+        return;
+      }
+
+      // Find an unlocked triple digit that would result in an unlocked single digit
+      let validTripleDigit = null;
+      const unlockedTripleDigits =
+        resultTables?.tripleDigitTable?.filter((item) => !item.lock) || [];
+
+      for (const tripleDigit of unlockedTripleDigits) {
+        const resultCalc = calculateResultFromTripleDigit(tripleDigit.number);
+        if (!resultCalc.isLocked) {
+          validTripleDigit = tripleDigit;
+          break;
+        }
+      }
+
+      if (validTripleDigit) {
+        await handleDeclareResult(validTripleDigit.number, true); // true = system auto-declaration
         showAlert(
           setAlert,
           "success",
@@ -480,19 +574,114 @@ const Results = ({ roundId }) => {
     }
   };
 
+  // Check if we're in the first 50 minutes (no result declaration allowed)
+  const isInFirstFiftyMinutes = () => {
+    if (!currentRound?.timeSlot) return false;
+    const match = currentRound.timeSlot.match(
+      /-\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i
+    );
+    if (!match) return false;
+
+    let endHour = parseInt(match[1], 10);
+    const endMinute = parseInt(match[2], 10);
+    const ampm = match[3].toUpperCase();
+
+    if (ampm === "PM" && endHour !== 12) endHour += 12;
+    if (ampm === "AM" && endHour === 12) endHour = 0;
+
+    const now = new Date();
+    const slotEnd = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      endHour,
+      endMinute,
+      0,
+      0
+    );
+
+    // If slotEnd is in the past (e.g., after midnight), add a day
+    if (slotEnd < now && now.getHours() - endHour > 2)
+      slotEnd.setDate(slotEnd.getDate() + 1);
+
+    const diffMinutes = (slotEnd - now) / (1000 * 60);
+    return diffMinutes > 10; // More than 10 minutes remaining = first 50 minutes
+  };
+
+  // Check if we're in the last minute (system auto-declaration time)
+  const isInLastMinute = () => {
+    if (!currentRound?.timeSlot) return false;
+    const match = currentRound.timeSlot.match(
+      /-\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i
+    );
+    if (!match) return false;
+
+    let endHour = parseInt(match[1], 10);
+    const endMinute = parseInt(match[2], 10);
+    const ampm = match[3].toUpperCase();
+
+    if (ampm === "PM" && endHour !== 12) endHour += 12;
+    if (ampm === "AM" && endHour === 12) endHour = 0;
+
+    const now = new Date();
+    const slotEnd = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      endHour,
+      endMinute,
+      0,
+      0
+    );
+
+    // If slotEnd is in the past (e.g., after midnight), add a day
+    if (slotEnd < now && now.getHours() - endHour > 2)
+      slotEnd.setDate(slotEnd.getDate() + 1);
+
+    const diffMinutes = (slotEnd - now) / (1000 * 60);
+    return diffMinutes <= 1 && diffMinutes >= 0; // Last minute
+  };
+
   // Declare result
-  const handleDeclareResult = async (tripleDigitNumber) => {
+  const handleDeclareResult = async (
+    tripleDigitNumber,
+    isSystemAutoDeclaration = false
+  ) => {
     setDeclareLoading(true);
     setError("");
 
     try {
+      // Check timing constraints (unless it's system auto-declaration)
+      if (!isSystemAutoDeclaration) {
+        if (isInFirstFiftyMinutes()) {
+          setError(
+            "Result declaration not allowed in the first 50 minutes. Please wait for the last 10 minutes."
+          );
+          setDeclareLoading(false);
+          return;
+        }
+      }
+
+      // Check if the selected triple digit is locked
+      const selectedTripleDigit = resultTables?.tripleDigitTable?.find(
+        (item) => item.number === tripleDigitNumber
+      );
+
+      if (selectedTripleDigit?.lock) {
+        setError(
+          `Cannot declare result: Triple digit ${tripleDigitNumber} is locked. Please choose another number.`
+        );
+        setDeclareLoading(false);
+        return;
+      }
+
       // First check if the triple digit is valid for result declaration
       const resultCalc = calculateResultFromTripleDigit(tripleDigitNumber);
 
       // If the resulting single digit is locked, show error
       if (resultCalc.isLocked) {
         setError(
-          `Cannot declare result: The sum ${resultCalc.sum} results in digit ${resultCalc.lastDigit} which is locked`
+          `Cannot declare result: The sum ${resultCalc.sum} results in digit ${resultCalc.lastDigit} which is locked. Please choose another number.`
         );
         setDeclareLoading(false);
         return;
@@ -898,7 +1087,10 @@ const Results = ({ roundId }) => {
                     </thead>
                     <tbody>
                       {(resultTables.tripleDigitTable || [])
-                        .sort((a, b) => (b.tokens || 0) - (a.tokens || 0))
+                        .sort((a, b) => {
+                          // Sort by tokens (descending) - highest tokens first
+                          return (b.tokens || 0) - (a.tokens || 0);
+                        })
                         .map((item, index) => (
                           <tr
                             key={item.number || index}
@@ -956,21 +1148,23 @@ const Results = ({ roundId }) => {
                                 <Button
                                   variant="success"
                                   size="sm"
+                                  disabled={
+                                    isInFirstFiftyMinutes() || declareLoading
+                                  }
                                   onClick={() => {
-                                    const resultCalc =
-                                      calculateResultFromTripleDigit(
-                                        item.number
-                                      );
-                                    if (resultCalc.isLocked) {
-                                      setError(
-                                        `Cannot declare result: The sum ${resultCalc.sum} results in digit ${resultCalc.lastDigit} which is locked`
-                                      );
-                                    } else {
-                                      handleDeclareResult(item.number);
-                                    }
+                                    handleDeclareResult(item.number);
                                   }}
+                                  title={
+                                    isInFirstFiftyMinutes()
+                                      ? "Result declaration available in last 10 minutes"
+                                      : "Click to declare as result"
+                                  }
                                 >
-                                  Declare as Result
+                                  {declareLoading ? (
+                                    <Spinner animation="border" size="sm" />
+                                  ) : (
+                                    "Declare as Result"
+                                  )}
                                 </Button>
                               )}
                             </td>

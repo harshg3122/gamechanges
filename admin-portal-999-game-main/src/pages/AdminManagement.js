@@ -1,137 +1,184 @@
-import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Table, Button, Modal, Form, Badge, InputGroup, Pagination, Dropdown } from 'react-bootstrap';
-import { FaUserShield, FaPlus, FaSearch, FaFilter, FaDownload, FaEye, FaEdit, FaTrash, FaKey, FaUsers } from 'react-icons/fa';
-import { adminAPI } from '../utils/api';
-import { showAlert } from '../utils/helpers';
+import React, { useState, useEffect } from "react";
+import {
+  Container,
+  Row,
+  Col,
+  Card,
+  Table,
+  Button,
+  Modal,
+  Form,
+  Badge,
+  InputGroup,
+  Pagination,
+  Dropdown,
+} from "react-bootstrap";
+import {
+  FaUserShield,
+  FaPlus,
+  FaSearch,
+  FaFilter,
+  FaDownload,
+  FaEye,
+  FaEdit,
+  FaTrash,
+  FaKey,
+  FaUsers,
+} from "react-icons/fa";
+import { adminAPI } from "../utils/api";
+import { showAlert } from "../utils/helpers";
 
 const AdminManagement = () => {
-  const [admins, setAdmins] = useState([]);
-  const [filteredAdmins, setFilteredAdmins] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
+  const [agents, setAgents] = useState([]);
+  const [filteredAgents, setFilteredAgents] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
-  const [adminsPerPage] = useState(10);
+  const [agentsPerPage] = useState(10);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [selectedAdmin, setSelectedAdmin] = useState(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState(null);
+  const [newAgentData, setNewAgentData] = useState(null);
   const [alert, setAlert] = useState(null);
   const [loading, setLoading] = useState(false);
 
   // Form states
   const [addForm, setAddForm] = useState({
-    fullName: '',
-    username: '',
-    email: '',
-    password: '',
-    role: 'admin'
+    fullName: "",
+    mobile: "",
+    email: "",
+    password: "",
   });
 
+  const [generatedReferralCode, setGeneratedReferralCode] = useState("");
+
   const [editForm, setEditForm] = useState({
-    fullName: '',
-    username: '',
-    email: '',
-    role: 'admin'
+    fullName: "",
+    mobile: "",
+    commissionRate: 5,
   });
 
   const [passwordForm, setPasswordForm] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: ''
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
   });
 
-  // Load admins from API
-  const loadAdmins = async () => {
+  // Load agents from API
+  const loadAgents = async () => {
     try {
       setLoading(true);
-      const response = await adminAPI.getAdmins();
-      
-      if (response.data && response.data.success && response.data.data && response.data.data.admins) {
-        setAdmins(response.data.data.admins);
+      const response = await adminAPI.getAgents();
+
+      if (
+        response.data &&
+        response.data.success &&
+        response.data.data &&
+        response.data.data.agents
+      ) {
+        setAgents(response.data.data.agents);
       } else {
-        console.error('Invalid response structure:', response.data);
-        setAdmins([]);
+        console.error("Invalid response structure:", response.data);
+        setAgents([]);
       }
     } catch (error) {
-      console.error('Error loading admins:', error);
-      showAlert(setAlert, 'danger', `Error loading admins: ${error.message}`);
-      setAdmins([]);
+      console.error("Error loading agents:", error);
+      // Check if it's a network error (backend not running)
+      if (
+        error.code === "ERR_NETWORK" ||
+        error.message.includes("ERR_CONNECTION_REFUSED")
+      ) {
+        showAlert(
+          setAlert,
+          "warning",
+          "Backend server is not running. Please start the backend server."
+        );
+      } else {
+        showAlert(setAlert, "danger", `Error loading agents: ${error.message}`);
+      }
+      setAgents([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadAdmins();
+    loadAgents();
   }, []);
 
   // Filter and search functionality
   useEffect(() => {
-    let filtered = Array.isArray(admins) ? admins.filter(admin => admin && admin._id) : [];
+    let filtered = Array.isArray(agents)
+      ? agents.filter((agent) => agent && agent._id)
+      : [];
 
     if (searchTerm) {
-      filtered = filtered.filter(admin =>
-        admin.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        admin.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        admin.email?.toLowerCase().includes(searchTerm.toLowerCase())
+      filtered = filtered.filter(
+        (agent) =>
+          agent.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          agent.mobile?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          agent.referralCode?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
-    if (roleFilter !== 'all') {
-      filtered = filtered.filter(admin => admin.role === roleFilter);
+    if (roleFilter !== "all") {
+      // For agents, we'll use a simple role mapping
+      const agentRole = "agent"; // All agents have the same role
+      filtered = filtered.filter((agent) => agentRole === roleFilter);
     }
 
-    setFilteredAdmins(filtered);
+    setFilteredAgents(filtered);
     setCurrentPage(1);
-  }, [searchTerm, roleFilter, admins]);
+  }, [searchTerm, roleFilter, agents]);
 
   // Pagination
-  const indexOfLastAdmin = currentPage * adminsPerPage;
-  const indexOfFirstAdmin = indexOfLastAdmin - adminsPerPage;
-  const currentAdmins = filteredAdmins.slice(indexOfFirstAdmin, indexOfLastAdmin);
-  const totalPages = Math.ceil(filteredAdmins.length / adminsPerPage);
+  const indexOfLastAgent = currentPage * agentsPerPage;
+  const indexOfFirstAgent = indexOfLastAgent - agentsPerPage;
+  const currentAgents = filteredAgents.slice(
+    indexOfFirstAgent,
+    indexOfLastAgent
+  );
+  const totalPages = Math.ceil(filteredAgents.length / agentsPerPage);
 
   // Badge functions
-  const getRoleBadge = (role) => {
-    switch (role) {
-      case 'super-admin':
-        return <Badge bg="danger">{role}</Badge>;
-      case 'admin':
-        return <Badge bg="warning">{role}</Badge>;
-      default:
-        return <Badge bg="secondary">{role}</Badge>;
-    }
+  const getRoleBadge = (agent) => {
+    // For agents, we'll show their commission rate as the role indicator
+    const commissionRate = agent.commissionRate || 5;
+    return <Badge bg="info">Agent ({commissionRate}%)</Badge>;
   };
 
-  const getStatusBadge = (status) => {
-    return status === 'active' ? 
-      <Badge bg="success">Active</Badge> : 
-      <Badge bg="secondary">Inactive</Badge>;
+  const getStatusBadge = (isActive) => {
+    return isActive ? (
+      <Badge bg="success">Active</Badge>
+    ) : (
+      <Badge bg="secondary">Inactive</Badge>
+    );
   };
 
-  // Handle view admin
-  const handleView = (admin) => {
-    setSelectedAdmin(admin);
+  // Handle view agent
+  const handleView = (agent) => {
+    setSelectedAgent(agent);
     setShowViewModal(true);
   };
 
-  // Handle edit admin
-  const handleEdit = (admin) => {
-    setSelectedAdmin(admin);
-    setEditForm({ 
-      fullName: admin.fullName, 
-      username: admin.username, 
-      email: admin.email, 
-      role: admin.role 
+  // Handle edit agent
+  const handleEdit = (agent) => {
+    setSelectedAgent(agent);
+    setEditForm({
+      fullName: agent.fullName,
+      mobile: agent.mobile,
+      commissionRate: agent.commissionRate || 5,
     });
     setShowEditModal(true);
   };
 
-  // Handle delete admin
-  const handleDelete = (admin) => {
-    setSelectedAdmin(admin);
+  // Handle delete agent
+  const handleDelete = (agent) => {
+    setSelectedAgent(agent);
     setShowDeleteModal(true);
   };
 
@@ -139,55 +186,111 @@ const AdminManagement = () => {
   const confirmDelete = async () => {
     try {
       setLoading(true);
-      const response = await adminAPI.deleteAdmin(selectedAdmin._id);
-      
+      const response = await adminAPI.deleteAgent(selectedAgent._id);
+
       if (response.data.success) {
-        const updatedAdmins = admins.filter(a => a._id !== selectedAdmin._id);
-        setAdmins(updatedAdmins);
+        const updatedAgents = agents.filter((a) => a._id !== selectedAgent._id);
+        setAgents(updatedAgents);
         setShowDeleteModal(false);
-        showAlert(setAlert, 'success', `Admin ${selectedAdmin.fullName} has been removed successfully.`);
+        showAlert(
+          setAlert,
+          "success",
+          `Agent ${selectedAgent.fullName} has been removed successfully.`
+        );
       }
     } catch (error) {
-      console.error('Error deleting admin:', error);
-      showAlert(setAlert, 'danger', `Error deleting admin: ${error.message}`);
+      console.error("Error deleting admin:", error);
+      showAlert(setAlert, "danger", `Error deleting admin: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
 
   // Handle change password
-  const handleChangePassword = (admin) => {
-    setSelectedAdmin(admin);
-    setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const handleChangePassword = (agent) => {
+    setSelectedAgent(agent);
+    setPasswordForm({
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    });
     setShowPasswordModal(true);
   };
 
-  // Handle add admin
-  const handleAddAdmin = () => {
-    setAddForm({ fullName: '', username: '', email: '', password: '', role: 'admin' });
+  // Generate referral code
+  const generateReferralCode = () => {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let result = "";
+    for (let i = 0; i < 8; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  };
+
+  // Handle add agent
+  const handleAddAgent = () => {
+    setAddForm({ fullName: "", mobile: "", email: "", password: "" });
+    setGeneratedReferralCode(generateReferralCode());
     setShowAddModal(true);
   };
 
-  // Submit new admin
-  const submitNewAdmin = async (e) => {
+  // Submit new agent
+  const submitNewAgent = async (e) => {
     e.preventDefault();
     try {
       setLoading(true);
-      // Remove email if empty before sending to backend
-      const payload = { ...addForm };
-      if (!payload.email || payload.email.trim() === '') {
-        delete payload.email;
-      }
-      const response = await adminAPI.createAdmin(payload);
-      
+      // Map to backend-required fields
+      const payload = {
+        fullName: addForm.fullName,
+        mobile: addForm.mobile,
+        password: addForm.password,
+        referralCode: generatedReferralCode,
+      };
+      const response = await adminAPI.createAgent(payload);
+
       if (response.data.success) {
-        await loadAdmins(); // Reload the list
+        const newAgent = response.data.data.agent;
+        await loadAgents(); // Reload the list
         setShowAddModal(false);
-        showAlert(setAlert, 'success', `Admin ${addForm.fullName} has been added successfully.`);
+
+        // Store new agent data and show success modal
+        setNewAgentData(newAgent);
+        setShowSuccessModal(true);
+
+        // Also show alert
+        showAlert(
+          setAlert,
+          "success",
+          `Agent ${addForm.fullName} has been added successfully!`
+        );
+      } else {
+        showAlert(
+          setAlert,
+          "danger",
+          response.data.message || "Failed to create agent"
+        );
       }
     } catch (error) {
-      console.error('Error adding admin:', error);
-      showAlert(setAlert, 'danger', `Error adding admin: ${error.message}`);
+      console.error("Error adding agent:", error);
+      // Check if it's a network error (backend not running)
+      if (
+        error.code === "ERR_NETWORK" ||
+        error.message.includes("ERR_CONNECTION_REFUSED")
+      ) {
+        showAlert(
+          setAlert,
+          "warning",
+          "Backend server is not running. Please start the backend server."
+        );
+      } else if (
+        error.response &&
+        error.response.data &&
+        error.response.data.message
+      ) {
+        showAlert(setAlert, "danger", error.response.data.message);
+      } else {
+        showAlert(setAlert, "danger", `Error adding agent: ${error.message}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -195,25 +298,29 @@ const AdminManagement = () => {
 
   // Handle export
   const handleExport = () => {
-    const exportData = filteredAdmins.map(admin => ({
-      ID: admin._id,
-      'Full Name': admin.fullName,
-      Username: admin.username,
-      Email: admin.email,
-      Role: admin.role,
-      Status: admin.isActive ? 'Active' : 'Inactive',
-      Permissions: (admin.permissions && Array.isArray(admin.permissions)) ? admin.permissions.join(', ') : 'None',
-      'Created At': admin.createdAt ? new Date(admin.createdAt).toLocaleString() : 'N/A'
+    const exportData = filteredAgents.map((agent) => ({
+      ID: agent._id,
+      "Full Name": agent.fullName,
+      Mobile: agent.mobile,
+      "Referral Code": agent.referralCode,
+      "Commission Rate": `${agent.commissionRate || 5}%`,
+      Status: agent.isActive ? "Active" : "Inactive",
+      "Referred Users": agent.referredUsers || 0,
+      "Created At": agent.createdAt
+        ? new Date(agent.createdAt).toLocaleString()
+        : "N/A",
     }));
 
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + Object.keys(exportData[0]).join(",") + "\n"
-      + exportData.map(row => Object.values(row).join(",")).join("\n");
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      Object.keys(exportData[0]).join(",") +
+      "\n" +
+      exportData.map((row) => Object.values(row).join(",")).join("\n");
 
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "admins_export.csv");
+    link.setAttribute("download", "agents_export.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -223,11 +330,14 @@ const AdminManagement = () => {
     <Container fluid className="p-4">
       {/* Alert */}
       {alert && (
-        <div className={`alert alert-${alert.type} alert-dismissible fade show`} role="alert">
+        <div
+          className={`alert alert-${alert.type} alert-dismissible fade show`}
+          role="alert"
+        >
           {alert.message}
-          <button 
-            type="button" 
-            className="btn-close" 
+          <button
+            type="button"
+            className="btn-close"
             onClick={() => setAlert(null)}
           ></button>
         </div>
@@ -240,14 +350,20 @@ const AdminManagement = () => {
             <div>
               <h2 className="mb-0">
                 <FaUserShield className="me-3 text-primary" />
-                Admin Management
+                Agent Management
               </h2>
-              <p className="text-muted mb-0">Manage admin accounts and permissions</p>
+              <p className="text-muted mb-0">
+                Manage agent accounts and permissions
+              </p>
             </div>
             <div>
-              <Button variant="success" className="me-2" onClick={handleAddAdmin}>
+              <Button
+                variant="success"
+                className="me-2"
+                onClick={handleAddAgent}
+              >
                 <FaPlus className="me-2" />
-                Add Admin
+                Add Agent
               </Button>
               <Button variant="outline-primary" onClick={handleExport}>
                 <FaDownload className="me-2" />
@@ -264,8 +380,8 @@ const AdminManagement = () => {
           <Card className="text-center border-primary">
             <Card.Body>
               <FaUsers className="display-4 text-primary mb-2" />
-              <h4>{admins.length}</h4>
-              <p className="text-muted mb-0">Total Admins</p>
+              <h4>{agents.length}</h4>
+              <p className="text-muted mb-0">Total Agents</p>
             </Card.Body>
           </Card>
         </Col>
@@ -273,8 +389,8 @@ const AdminManagement = () => {
           <Card className="text-center border-success">
             <Card.Body>
               <FaUserShield className="display-4 text-success mb-2" />
-              <h4>{admins.filter(admin => admin.isActive).length}</h4>
-              <p className="text-muted mb-0">Active Admins</p>
+              <h4>{agents.filter((agent) => agent.isActive).length}</h4>
+              <p className="text-muted mb-0">Active Agents</p>
             </Card.Body>
           </Card>
         </Col>
@@ -282,8 +398,10 @@ const AdminManagement = () => {
           <Card className="text-center border-warning">
             <Card.Body>
               <FaUsers className="display-4 text-warning mb-2" />
-              <h4>{admins.filter(admin => admin.role === 'admin').length}</h4>
-              <p className="text-muted mb-0">Regular Admins</p>
+              <h4>
+                {agents.filter((agent) => agent.commissionRate <= 5).length}
+              </h4>
+              <p className="text-muted mb-0">Regular Agents</p>
             </Card.Body>
           </Card>
         </Col>
@@ -291,8 +409,10 @@ const AdminManagement = () => {
           <Card className="text-center border-danger">
             <Card.Body>
               <FaUserShield className="display-4 text-danger mb-2" />
-              <h4>{admins.filter(admin => admin.role === 'super-admin').length}</h4>
-              <p className="text-muted mb-0">Super Admins</p>
+              <h4>
+                {agents.filter((agent) => agent.commissionRate > 5).length}
+              </h4>
+              <p className="text-muted mb-0">Premium Agents</p>
             </Card.Body>
           </Card>
         </Col>
@@ -307,7 +427,7 @@ const AdminManagement = () => {
             </InputGroup.Text>
             <Form.Control
               type="text"
-              placeholder="Search by name, username, or email..."
+              placeholder="Search by name, mobile, or referral code..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -322,50 +442,50 @@ const AdminManagement = () => {
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
             >
-              <option value="all">All Roles</option>
-              <option value="super-admin">Super Admin</option>
-              <option value="admin">Admin</option>
-              <option value="moderator">Moderator</option>
+              <option value="all">All Agents</option>
+              <option value="agent">All Agents</option>
             </Form.Select>
           </InputGroup>
         </Col>
         <Col md={3}>
           <div className="text-muted">
-            Showing {filteredAdmins.length} of {admins.length} admins
+            Showing {filteredAgents.length} of {agents.length} agents
           </div>
         </Col>
       </Row>
 
-      {/* Admins Table */}
+      {/* Agents Table */}
       <Card className="shadow-sm">
         <Card.Body>
           <Table responsive hover>
             <thead>
               <tr>
                 <th>Full Name</th>
-                <th>Username</th>
-                <th>Email</th>
-                <th>Role</th>
+                <th>Mobile</th>
+                <th>Referral Code</th>
+                <th>Commission</th>
                 <th>Status</th>
-                <th>Permissions</th>
+                <th>Referred Users</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {currentAdmins.map((admin) => (
-                <tr key={admin._id}>
+              {currentAgents.map((agent) => (
+                <tr key={agent._id}>
                   <td>
                     <div className="d-flex align-items-center">
                       <FaUserShield className="me-2 text-primary" />
-                      {admin.fullName}
+                      {agent.fullName}
                     </div>
                   </td>
-                  <td>{admin.username}</td>
-                  <td>{admin.email}</td>
-                  <td>{getRoleBadge(admin.role)}</td>
-                  <td>{admin.isActive ? getStatusBadge('active') : getStatusBadge('inactive')}</td>
+                  <td>{agent.mobile}</td>
                   <td>
-                    <small>{(admin.permissions && Array.isArray(admin.permissions)) ? admin.permissions.join(', ') : 'None'}</small>
+                    <code>{agent.referralCode}</code>
+                  </td>
+                  <td>{getRoleBadge(agent)}</td>
+                  <td>{getStatusBadge(agent.isActive)}</td>
+                  <td>
+                    <Badge bg="info">{agent.referredUsers || 0}</Badge>
                   </td>
                   <td>
                     <Dropdown>
@@ -373,23 +493,24 @@ const AdminManagement = () => {
                         Actions
                       </Dropdown.Toggle>
                       <Dropdown.Menu>
-                        <Dropdown.Item onClick={() => handleView(admin)}>
+                        <Dropdown.Item onClick={() => handleView(agent)}>
                           <FaEye className="me-2" />
                           View
                         </Dropdown.Item>
-                        <Dropdown.Item onClick={() => handleEdit(admin)}>
+                        <Dropdown.Item onClick={() => handleEdit(agent)}>
                           <FaEdit className="me-2" />
                           Edit
                         </Dropdown.Item>
-                        <Dropdown.Item onClick={() => handleChangePassword(admin)}>
+                        <Dropdown.Item
+                          onClick={() => handleChangePassword(agent)}
+                        >
                           <FaKey className="me-2" />
                           Change Password
                         </Dropdown.Item>
                         <Dropdown.Divider />
-                        <Dropdown.Item 
-                          onClick={() => handleDelete(admin)}
+                        <Dropdown.Item
+                          onClick={() => handleDelete(agent)}
                           className="text-danger"
-                          disabled={admin.role === 'super-admin'}
                         >
                           <FaTrash className="me-2" />
                           Remove
@@ -403,9 +524,9 @@ const AdminManagement = () => {
           </Table>
 
           {/* No data message */}
-          {currentAdmins.length === 0 && (
+          {currentAgents.length === 0 && (
             <div className="text-center py-4">
-              <p className="text-muted">No admins found</p>
+              <p className="text-muted">No agents found</p>
             </div>
           )}
 
@@ -436,12 +557,16 @@ const AdminManagement = () => {
         </Card.Body>
       </Card>
 
-      {/* Add Admin Modal */}
-      <Modal show={showAddModal} onHide={() => setShowAddModal(false)} size="lg">
+      {/* Add Agent Modal */}
+      <Modal
+        show={showAddModal}
+        onHide={() => setShowAddModal(false)}
+        size="lg"
+      >
         <Modal.Header closeButton>
-          <Modal.Title>Add New Admin</Modal.Title>
+          <Modal.Title>Add New Agent</Modal.Title>
         </Modal.Header>
-        <Form onSubmit={submitNewAdmin}>
+        <Form onSubmit={submitNewAgent}>
           <Modal.Body>
             <Row>
               <Col md={6}>
@@ -450,7 +575,9 @@ const AdminManagement = () => {
                   <Form.Control
                     type="text"
                     value={addForm.fullName}
-                    onChange={(e) => setAddForm({...addForm, fullName: e.target.value})}
+                    onChange={(e) =>
+                      setAddForm({ ...addForm, fullName: e.target.value })
+                    }
                     placeholder="Enter full name"
                     required
                   />
@@ -458,12 +585,14 @@ const AdminManagement = () => {
               </Col>
               <Col md={6}>
                 <Form.Group className="mb-3">
-                  <Form.Label>Username *</Form.Label>
+                  <Form.Label>Mobile Number *</Form.Label>
                   <Form.Control
-                    type="text"
-                    value={addForm.username}
-                    onChange={(e) => setAddForm({...addForm, username: e.target.value})}
-                    placeholder="Enter username"
+                    type="tel"
+                    value={addForm.mobile}
+                    onChange={(e) =>
+                      setAddForm({ ...addForm, mobile: e.target.value })
+                    }
+                    placeholder="Enter mobile number"
                     required
                   />
                 </Form.Group>
@@ -476,8 +605,10 @@ const AdminManagement = () => {
                   <Form.Control
                     type="email"
                     value={addForm.email}
-                    onChange={(e) => setAddForm({...addForm, email: e.target.value})}
-                    placeholder="Enter email "
+                    onChange={(e) =>
+                      setAddForm({ ...addForm, email: e.target.value })
+                    }
+                    placeholder="Enter email"
                   />
                 </Form.Group>
               </Col>
@@ -487,25 +618,47 @@ const AdminManagement = () => {
                   <Form.Control
                     type="password"
                     value={addForm.password}
-                    onChange={(e) => setAddForm({...addForm, password: e.target.value})}
+                    onChange={(e) =>
+                      setAddForm({ ...addForm, password: e.target.value })
+                    }
                     placeholder="Enter password"
                     required
                   />
                 </Form.Group>
               </Col>
             </Row>
+
+            {/* Auto-Generated Referral Code Section */}
             <Row>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Role</Form.Label>
-                  <Form.Select
-                    value={addForm.role}
-                    onChange={(e) => setAddForm({...addForm, role: e.target.value})}
-                  >
-                    <option value="admin">Admin</option>
-                    <option value="moderator">Moderator</option>
-                  </Form.Select>
-                </Form.Group>
+              <Col md={12}>
+                <div className="mb-3 p-3 bg-light rounded border">
+                  <div className="d-flex align-items-center justify-content-between">
+                    <div>
+                      <h6 className="text-primary mb-1">
+                        📋 Auto-Generated Referral Code
+                      </h6>
+                      <small className="text-muted">
+                        This unique code will be assigned to the agent
+                      </small>
+                    </div>
+                    <div className="text-end">
+                      <h4 className="text-success font-weight-bold mb-0">
+                        {generatedReferralCode || "Click 'Generate' to create"}
+                      </h4>
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <Button
+                      variant="outline-primary"
+                      size="sm"
+                      onClick={() =>
+                        setGeneratedReferralCode(generateReferralCode())
+                      }
+                    >
+                      🔄 Generate New Code
+                    </Button>
+                  </div>
+                </div>
               </Col>
             </Row>
           </Modal.Body>
@@ -514,64 +667,84 @@ const AdminManagement = () => {
               Cancel
             </Button>
             <Button variant="primary" type="submit" disabled={loading}>
-              {loading ? 'Adding...' : 'Add Admin'}
+              {loading ? "Adding..." : "Add Agent"}
             </Button>
           </Modal.Footer>
         </Form>
       </Modal>
 
-      {/* View Admin Modal */}
-      <Modal show={showViewModal} onHide={() => setShowViewModal(false)} size="lg">
+      {/* View Agent Modal */}
+      <Modal
+        show={showViewModal}
+        onHide={() => setShowViewModal(false)}
+        size="lg"
+      >
         <Modal.Header closeButton>
-          <Modal.Title>Admin Details</Modal.Title>
+          <Modal.Title>Agent Details</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          {selectedAdmin && (
+          {selectedAgent && (
             <div>
               <Row>
                 <Col md={6}>
                   <strong>ID:</strong>
-                  <p>{selectedAdmin._id}</p>
+                  <p>{selectedAgent._id}</p>
                 </Col>
                 <Col md={6}>
                   <strong>Full Name:</strong>
-                  <p>{selectedAdmin.fullName}</p>
+                  <p>{selectedAgent.fullName}</p>
                 </Col>
               </Row>
               <Row>
                 <Col md={6}>
-                  <strong>Username:</strong>
-                  <p>{selectedAdmin.username}</p>
+                  <strong>Mobile:</strong>
+                  <p>{selectedAgent.mobile}</p>
                 </Col>
                 <Col md={6}>
-                  <strong>Email:</strong>
-                  <p>{selectedAdmin.email}</p>
+                  <strong>Referral Code:</strong>
+                  <p>
+                    <code>{selectedAgent.referralCode}</code>
+                  </p>
                 </Col>
               </Row>
               <Row>
                 <Col md={6}>
-                  <strong>Role:</strong>
-                  <p>{getRoleBadge(selectedAdmin.role)}</p>
+                  <strong>Commission Rate:</strong>
+                  <p>{getRoleBadge(selectedAgent)}</p>
                 </Col>
                 <Col md={6}>
                   <strong>Status:</strong>
-                  <p>{selectedAdmin.isActive ? getStatusBadge('active') : getStatusBadge('inactive')}</p>
+                  <p>{getStatusBadge(selectedAgent.isActive)}</p>
                 </Col>
               </Row>
               <Row>
-                <Col md={12}>
-                  <strong>Permissions:</strong>
-                  <p>{(selectedAdmin.permissions && Array.isArray(selectedAdmin.permissions)) ? selectedAdmin.permissions.join(', ') : 'None'}</p>
+                <Col md={6}>
+                  <strong>Referred Users:</strong>
+                  <p>
+                    <Badge bg="info">{selectedAgent.referredUsers || 0}</Badge>
+                  </p>
+                </Col>
+                <Col md={6}>
+                  <strong>Commission Rate:</strong>
+                  <p>{selectedAgent.commissionRate || 5}%</p>
                 </Col>
               </Row>
               <Row>
                 <Col md={6}>
                   <strong>Created At:</strong>
-                  <p>{selectedAdmin.createdAt ? new Date(selectedAdmin.createdAt).toLocaleString() : 'N/A'}</p>
+                  <p>
+                    {selectedAgent.createdAt
+                      ? new Date(selectedAgent.createdAt).toLocaleString()
+                      : "N/A"}
+                  </p>
                 </Col>
                 <Col md={6}>
                   <strong>Updated At:</strong>
-                  <p>{selectedAdmin.updatedAt ? new Date(selectedAdmin.updatedAt).toLocaleString() : 'N/A'}</p>
+                  <p>
+                    {selectedAgent.updatedAt
+                      ? new Date(selectedAgent.updatedAt).toLocaleString()
+                      : "N/A"}
+                  </p>
                 </Col>
               </Row>
             </div>
@@ -584,13 +757,17 @@ const AdminManagement = () => {
         </Modal.Footer>
       </Modal>
 
-      {/* Edit Admin Modal */}
-      <Modal show={showEditModal} onHide={() => setShowEditModal(false)} size="lg">
+      {/* Edit Agent Modal */}
+      <Modal
+        show={showEditModal}
+        onHide={() => setShowEditModal(false)}
+        size="lg"
+      >
         <Modal.Header closeButton>
-          <Modal.Title>Edit Admin</Modal.Title>
+          <Modal.Title>Edit Agent</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          {selectedAdmin && (
+          {selectedAgent && (
             <Form>
               <Row>
                 <Col md={6}>
@@ -598,16 +775,16 @@ const AdminManagement = () => {
                     <Form.Label>Full Name</Form.Label>
                     <Form.Control
                       type="text"
-                      defaultValue={selectedAdmin.fullName}
+                      defaultValue={selectedAgent.fullName}
                     />
                   </Form.Group>
                 </Col>
                 <Col md={6}>
                   <Form.Group className="mb-3">
-                    <Form.Label>Username</Form.Label>
+                    <Form.Label>Mobile</Form.Label>
                     <Form.Control
-                      type="text"
-                      defaultValue={selectedAdmin.username}
+                      type="tel"
+                      defaultValue={selectedAgent.mobile}
                     />
                   </Form.Group>
                 </Col>
@@ -615,29 +792,23 @@ const AdminManagement = () => {
               <Row>
                 <Col md={6}>
                   <Form.Group className="mb-3">
-                    <Form.Label>Email</Form.Label>
+                    <Form.Label>Commission Rate (%)</Form.Label>
                     <Form.Control
-                      type="email"
-                      defaultValue={selectedAdmin.email}
+                      type="number"
+                      min="0"
+                      max="100"
+                      defaultValue={selectedAgent.commissionRate || 5}
                     />
                   </Form.Group>
                 </Col>
-                <Col md={6}>
-                  <Form.Group className="mb-3">
-                    <Form.Label>Role</Form.Label>
-                    <Form.Select defaultValue={selectedAdmin.role}>
-                      <option value="super-admin">Super Admin</option>
-                      <option value="admin">Admin</option>
-                      <option value="moderator">Moderator</option>
-                    </Form.Select>
-                  </Form.Group>
-                </Col>
-              </Row>
-              <Row>
                 <Col md={6}>
                   <Form.Group className="mb-3">
                     <Form.Label>Status</Form.Label>
-                    <Form.Select defaultValue={selectedAdmin.isActive ? 'active' : 'inactive'}>
+                    <Form.Select
+                      defaultValue={
+                        selectedAgent.isActive ? "active" : "inactive"
+                      }
+                    >
                       <option value="active">Active</option>
                       <option value="inactive">Inactive</option>
                     </Form.Select>
@@ -651,9 +822,7 @@ const AdminManagement = () => {
           <Button variant="secondary" onClick={() => setShowEditModal(false)}>
             Cancel
           </Button>
-          <Button variant="primary">
-            Save Changes
-          </Button>
+          <Button variant="primary">Save Changes</Button>
         </Modal.Footer>
       </Modal>
 
@@ -663,10 +832,11 @@ const AdminManagement = () => {
           <Modal.Title>Confirm Remove</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          {selectedAdmin && (
+          {selectedAgent && (
             <p>
-              Are you sure you want to remove admin <strong>{selectedAdmin.fullName}</strong>? 
-              This action cannot be undone.
+              Are you sure you want to remove agent{" "}
+              <strong>{selectedAgent.fullName}</strong>? This action cannot be
+              undone.
             </p>
           )}
         </Modal.Body>
@@ -675,21 +845,24 @@ const AdminManagement = () => {
             Cancel
           </Button>
           <Button variant="danger" onClick={confirmDelete} disabled={loading}>
-            {loading ? 'Removing...' : 'Remove Admin'}
+            {loading ? "Removing..." : "Remove Agent"}
           </Button>
         </Modal.Footer>
       </Modal>
 
       {/* Change Password Modal */}
-      <Modal show={showPasswordModal} onHide={() => setShowPasswordModal(false)}>
+      <Modal
+        show={showPasswordModal}
+        onHide={() => setShowPasswordModal(false)}
+      >
         <Modal.Header closeButton>
           <Modal.Title>Change Password</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          {selectedAdmin && (
+          {selectedAgent && (
             <div>
               <p className="mb-3">
-                <strong>Admin:</strong> {selectedAdmin.fullName}
+                <strong>Agent:</strong> {selectedAgent.fullName}
               </p>
               <Form>
                 <Form.Group className="mb-3">
@@ -697,7 +870,12 @@ const AdminManagement = () => {
                   <Form.Control
                     type="password"
                     value={passwordForm.currentPassword}
-                    onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
+                    onChange={(e) =>
+                      setPasswordForm({
+                        ...passwordForm,
+                        currentPassword: e.target.value,
+                      })
+                    }
                   />
                 </Form.Group>
                 <Form.Group className="mb-3">
@@ -705,7 +883,12 @@ const AdminManagement = () => {
                   <Form.Control
                     type="password"
                     value={passwordForm.newPassword}
-                    onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+                    onChange={(e) =>
+                      setPasswordForm({
+                        ...passwordForm,
+                        newPassword: e.target.value,
+                      })
+                    }
                   />
                 </Form.Group>
                 <Form.Group className="mb-3">
@@ -713,7 +896,12 @@ const AdminManagement = () => {
                   <Form.Control
                     type="password"
                     value={passwordForm.confirmPassword}
-                    onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+                    onChange={(e) =>
+                      setPasswordForm({
+                        ...passwordForm,
+                        confirmPassword: e.target.value,
+                      })
+                    }
                   />
                 </Form.Group>
               </Form>
@@ -721,11 +909,65 @@ const AdminManagement = () => {
           )}
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowPasswordModal(false)}>
+          <Button
+            variant="secondary"
+            onClick={() => setShowPasswordModal(false)}
+          >
             Cancel
           </Button>
-          <Button variant="primary">
-            Update Password
+          <Button variant="primary">Update Password</Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Success Modal for New Agent */}
+      <Modal
+        show={showSuccessModal}
+        onHide={() => setShowSuccessModal(false)}
+        centered
+      >
+        <Modal.Header
+          closeButton
+          style={{ backgroundColor: "#28a745", color: "white" }}
+        >
+          <Modal.Title>🎉 Agent Created Successfully!</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {newAgentData && (
+            <div className="text-center">
+              <h5>Agent Details:</h5>
+              <div className="mb-3">
+                <strong>Name:</strong> {newAgentData.fullName}
+              </div>
+              <div className="mb-3">
+                <strong>Mobile:</strong> {newAgentData.mobile}
+              </div>
+              <div className="mb-4 p-3 bg-light rounded">
+                <h6 className="text-primary">📋 Referral Code:</h6>
+                <h3 className="text-success font-weight-bold">
+                  {newAgentData.referralCode}
+                </h3>
+                <small className="text-muted">
+                  Share this code with new users for referrals
+                </small>
+              </div>
+              <div className="mb-2">
+                <strong>Status:</strong>{" "}
+                <span className="text-success">Active</span>
+              </div>
+              <div>
+                <strong>Commission Rate:</strong>{" "}
+                {newAgentData.commissionRate || 5}%
+              </div>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="primary"
+            onClick={() => setShowSuccessModal(false)}
+            className="px-4"
+          >
+            Got it!
           </Button>
         </Modal.Footer>
       </Modal>

@@ -256,7 +256,6 @@ const initializeBettingTimeFlow = async (roundId) => {
       await Round.findByIdAndUpdate(roundId, { status: 'completed' });
       
       console.log(`Result declared: Triple ${selectedTriple}, Single ${singleDigit}`);
-    }
     } catch (error) {
       console.error('Error in auto result declaration:', error);
     }
