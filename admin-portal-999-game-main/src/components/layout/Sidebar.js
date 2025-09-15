@@ -24,7 +24,7 @@ import "./Sidebar.css";
 const Sidebar = forwardRef(({ isOpen, toggleSidebar, closeSidebar }, ref) => {
   const { logout, user } = useAuth();
 
-  const menuItems = [
+  const adminMenu = [
     { path: "/dashboard", icon: FaTachometerAlt, label: "Dashboard" },
     { path: "/users", icon: FaUsers, label: "User Management" },
     { path: "/agents", icon: FaUserShield, label: "Agent Management" },
@@ -39,6 +39,12 @@ const Sidebar = forwardRef(({ isOpen, toggleSidebar, closeSidebar }, ref) => {
     { path: "/settings", icon: FaCog, label: "Settings" },
     { path: "/notifications", icon: FaBell, label: "Notifications" },
     { path: "/reports", icon: FaFileAlt, label: "Reports" },
+  ];
+
+  const agentMenu = [
+    { path: "/dashboard", icon: FaTachometerAlt, label: "Dashboard" },
+    { path: "/users", icon: FaUsers, label: "User Management" },
+    { path: "/results", icon: FaListOl, label: "Number Selection & Results" },
   ];
 
   const handleLogout = () => {
@@ -64,7 +70,11 @@ const Sidebar = forwardRef(({ isOpen, toggleSidebar, closeSidebar }, ref) => {
         <div className="sidebar-header">
           <h4 className="sidebar-title">
             <FaUser className="me-2" />
-            {isOpen && <span>Admin Panel</span>}
+            {isOpen && (
+              <span>
+                {user?.role === "agent" ? "Agent Panel" : "Admin Panel"}
+              </span>
+            )}
           </h4>
           {user && (
             <div className="user-info">
@@ -75,14 +85,16 @@ const Sidebar = forwardRef(({ isOpen, toggleSidebar, closeSidebar }, ref) => {
         </div>
 
         <Nav className="flex-column sidebar-nav">
-          {menuItems.map((item, index) => (
-            <LinkContainer key={index} to={item.path}>
-              <Nav.Link className="sidebar-link" onClick={handleNavClick}>
-                <item.icon className="sidebar-icon" />
-                {isOpen && <span className="sidebar-text">{item.label}</span>}
-              </Nav.Link>
-            </LinkContainer>
-          ))}
+          {(user?.role === "agent" ? agentMenu : adminMenu).map(
+            (item, index) => (
+              <LinkContainer key={index} to={item.path}>
+                <Nav.Link className="sidebar-link" onClick={handleNavClick}>
+                  <item.icon className="sidebar-icon" />
+                  {isOpen && <span className="sidebar-text">{item.label}</span>}
+                </Nav.Link>
+              </LinkContainer>
+            )
+          )}
 
           <Nav.Link className="sidebar-link logout-link" onClick={handleLogout}>
             <FaSignOutAlt className="sidebar-icon" />

@@ -1,13 +1,13 @@
-const Agent = require('../models/Agent');
-const User = require('../models/User');
-const { validationResult } = require('express-validator');
+const Agent = require("../models/Agent");
+const User = require("../models/User");
+const { validationResult } = require("express-validator");
 
 // Get all agents
 const getAllAgents = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
-    const search = req.query.search || '';
+    const search = req.query.search || "";
     const status = req.query.status; // 'active', 'inactive'
 
     const skip = (page - 1) * limit;
@@ -15,33 +15,30 @@ const getAllAgents = async (req, res) => {
     let query = {};
     if (search) {
       query.$or = [
-        { fullName: { $regex: search, $options: 'i' } },
-        { mobile: { $regex: search, $options: 'i' } },
-        { referralCode: { $regex: search, $options: 'i' } }
+        { fullName: { $regex: search, $options: "i" } },
+        { mobile: { $regex: search, $options: "i" } },
+        { referralCode: { $regex: search, $options: "i" } },
       ];
     }
     if (status) {
-      query.isActive = status === 'active';
+      query.isActive = status === "active";
     }
 
     const [agents, totalAgents] = await Promise.all([
-      Agent.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit),
-      Agent.countDocuments(query)
+      Agent.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Agent.countDocuments(query),
     ]);
 
     // Get referral statistics for each agent
     const agentsWithStats = await Promise.all(
       agents.map(async (agent) => {
-        const referredUsers = await User.countDocuments({ 
-          referral: agent.referralCode 
+        const referredUsers = await User.countDocuments({
+          referral: agent.referralCode,
         });
-        
+
         return {
           ...agent.toObject(),
-          referredUsers
+          referredUsers,
         };
       })
     );
@@ -55,15 +52,15 @@ const getAllAgents = async (req, res) => {
           totalPages: Math.ceil(totalAgents / limit),
           totalAgents,
           hasNextPage: page < Math.ceil(totalAgents / limit),
-          hasPrevPage: page > 1
-        }
-      }
+          hasPrevPage: page > 1,
+        },
+      },
     });
   } catch (error) {
-    console.error('Get agents error:', error);
+    console.error("Get agents error:", error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching agents'
+      message: "Error fetching agents",
     });
   }
 };
@@ -75,19 +72,21 @@ const createAgent = async (req, res) => {
     if (!errors.isEmpty()) {
       return res.status(400).json({
         success: false,
-        message: 'Validation failed',
-        errors: errors.array()
+        message: "Validation failed",
+        errors: errors.array(),
       });
     }
 
-    const { fullName, mobile, password } = req.body;
+    const { fullName, mobile, email, password } = req.body;
 
-    // Check if mobile already exists
-    const existingMobile = await Agent.findOne({ mobile });
+    // Check if mobile/email already exists
+    const existingMobile = await Agent.findOne({
+      $or: [{ mobile }, { email }],
+    });
     if (existingMobile) {
       return res.status(400).json({
         success: false,
-        message: 'Mobile number already exists'
+        message: "Mobile or Email already exists",
       });
     }
 
@@ -105,22 +104,23 @@ const createAgent = async (req, res) => {
     const agent = new Agent({
       fullName,
       mobile,
-      password: password || 'defaultpass123',
-      referralCode // Auto-generated unique code
+      email,
+      password: password || "defaultpass123",
+      referralCode, // Auto-generated unique code
     });
 
     await agent.save();
 
     res.status(201).json({
       success: true,
-      message: 'Agent created successfully',
-      data: { agent }
+      message: "Agent created successfully",
+      data: { agent },
     });
   } catch (error) {
-    console.error('Create agent error:', error);
+    console.error("Create agent error:", error);
     res.status(500).json({
       success: false,
-      message: 'Error creating agent'
+      message: "Error creating agent",
     });
   }
 };
@@ -132,8 +132,8 @@ const updateAgent = async (req, res) => {
     if (!errors.isEmpty()) {
       return res.status(400).json({
         success: false,
-        message: 'Validation failed',
-        errors: errors.array()
+        message: "Validation failed",
+        errors: errors.array(),
       });
     }
 
@@ -147,14 +147,14 @@ const updateAgent = async (req, res) => {
 
     // If updating referral code, check uniqueness
     if (updates.referralCode) {
-      const existingAgent = await Agent.findOne({ 
+      const existingAgent = await Agent.findOne({
         referralCode: updates.referralCode,
-        _id: { $ne: agentId }
+        _id: { $ne: agentId },
       });
       if (existingAgent) {
         return res.status(400).json({
           success: false,
-          message: 'Referral code already exists'
+          message: "Referral code already exists",
         });
       }
     }
@@ -168,20 +168,20 @@ const updateAgent = async (req, res) => {
     if (!agent) {
       return res.status(404).json({
         success: false,
-        message: 'Agent not found'
+        message: "Agent not found",
       });
     }
 
     res.json({
       success: true,
-      message: 'Agent updated successfully',
-      data: { agent }
+      message: "Agent updated successfully",
+      data: { agent },
     });
   } catch (error) {
-    console.error('Update agent error:', error);
+    console.error("Update agent error:", error);
     res.status(500).json({
       success: false,
-      message: 'Error updating agent'
+      message: "Error updating agent",
     });
   }
 };
@@ -195,51 +195,53 @@ const getAgentDetails = async (req, res) => {
     if (!agent) {
       return res.status(404).json({
         success: false,
-        message: 'Agent not found'
+        message: "Agent not found",
       });
     }
 
     // Get referred users
-    const referredUsers = await User.find({ 
-      referral: agent.referralCode 
+    const referredUsers = await User.find({
+      referral: agent.referralCode,
     })
-    .select('username mobileNumber balance createdAt isActive')
-    .sort({ createdAt: -1 });
+      .select("username mobileNumber balance createdAt isActive")
+      .sort({ createdAt: -1 });
 
     // Calculate agent statistics
     const totalReferrals = referredUsers.length;
-    const activeReferrals = referredUsers.filter(user => user.isActive).length;
-    
+    const activeReferrals = referredUsers.filter(
+      (user) => user.isActive
+    ).length;
+
     // Calculate total commission earned (this would need to be tracked separately)
     // For now, we'll calculate based on user activities
-    const Bet = require('../models/Bet');
-    const referredUserIds = referredUsers.map(user => user._id);
-    
+    const Bet = require("../models/Bet");
+    const referredUserIds = referredUsers.map((user) => user._id);
+
     let stats = {
       totalBets: 0,
       totalAmount: 0,
-      totalCommission: 0
+      totalCommission: 0,
     };
 
     if (referredUserIds.length > 0) {
       const bettingStats = await Bet.aggregate([
-        { 
-          $match: { 
-            userId: { $in: referredUserIds }
-          }
+        {
+          $match: {
+            userId: { $in: referredUserIds },
+          },
         },
         {
           $group: {
             _id: null,
             totalBets: { $sum: 1 },
-            totalAmount: { $sum: '$amount' },
-            totalCommission: { 
-              $sum: { 
-                $multiply: ['$amount', (agent.commissionRate || 5) / 100] 
-              }
-            }
-          }
-        }
+            totalAmount: { $sum: "$amount" },
+            totalCommission: {
+              $sum: {
+                $multiply: ["$amount", (agent.commissionRate || 5) / 100],
+              },
+            },
+          },
+        },
       ]);
 
       stats = bettingStats[0] || stats;
@@ -253,15 +255,15 @@ const getAgentDetails = async (req, res) => {
         statistics: {
           totalReferrals,
           activeReferrals,
-          ...stats
-        }
-      }
+          ...stats,
+        },
+      },
     });
   } catch (error) {
-    console.error('Get agent details error:', error);
+    console.error("Get agent details error:", error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching agent details'
+      message: "Error fetching agent details",
     });
   }
 };
@@ -275,7 +277,7 @@ const toggleAgentStatus = async (req, res) => {
     if (!agent) {
       return res.status(404).json({
         success: false,
-        message: 'Agent not found'
+        message: "Agent not found",
       });
     }
 
@@ -284,17 +286,19 @@ const toggleAgentStatus = async (req, res) => {
 
     res.json({
       success: true,
-      message: `Agent ${agent.isActive ? 'activated' : 'deactivated'} successfully`,
+      message: `Agent ${
+        agent.isActive ? "activated" : "deactivated"
+      } successfully`,
       data: {
         agentId: agent._id,
-        isActive: agent.isActive
-      }
+        isActive: agent.isActive,
+      },
     });
   } catch (error) {
-    console.error('Toggle agent status error:', error);
+    console.error("Toggle agent status error:", error);
     res.status(500).json({
       success: false,
-      message: 'Error updating agent status'
+      message: "Error updating agent status",
     });
   }
 };
@@ -309,19 +313,19 @@ const deleteAgent = async (req, res) => {
     if (!agent) {
       return res.status(404).json({
         success: false,
-        message: 'Agent not found'
+        message: "Agent not found",
       });
     }
 
     // Check if agent has referred users
-    const referredUsers = await User.countDocuments({ 
-      referral: agent.referralCode
+    const referredUsers = await User.countDocuments({
+      referral: agent.referralCode,
     });
 
     if (referredUsers > 0) {
       return res.status(400).json({
         success: false,
-        message: 'Cannot delete agent with existing referrals'
+        message: "Cannot delete agent with existing referrals",
       });
     }
 
@@ -329,21 +333,21 @@ const deleteAgent = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Agent deleted successfully'
+      message: "Agent deleted successfully",
     });
   } catch (error) {
-    console.error('Delete agent error:', error);
+    console.error("Delete agent error:", error);
     res.status(500).json({
       success: false,
-      message: 'Error deleting agent'
+      message: "Error deleting agent",
     });
   }
 };
 
 // Generate referral code
 const generateReferralCode = () => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let result = '';
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let result = "";
   for (let i = 0; i < 8; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
@@ -357,5 +361,5 @@ module.exports = {
   getAgentDetails,
   toggleAgentStatus,
   deleteAgent,
-  generateReferralCode
+  generateReferralCode,
 };

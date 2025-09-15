@@ -1,12 +1,12 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { authAPI } from '../utils/api';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { authAPI, agentAPI } from "../utils/api";
 
 const AuthContext = createContext();
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };
@@ -17,40 +17,45 @@ export const AuthProvider = ({ children }) => {
 
   // Simple authentication check - no complex expiry logic
   const checkAuth = () => {
-    const token = localStorage.getItem('admin_token');
-    const userData = localStorage.getItem('admin_user');
-    
-    console.log('🔍 Simple auth check - Token:', !!token, 'UserData:', !!userData);
-    
+    const token = localStorage.getItem("admin_token");
+    const userData = localStorage.getItem("admin_user");
+
+    console.log(
+      "🔍 Simple auth check - Token:",
+      !!token,
+      "UserData:",
+      !!userData
+    );
+
     if (token && userData) {
       try {
         const parsedUser = JSON.parse(userData);
-        
+
         // Only check if token data exists for expiry, but be lenient
-        const tokenData = localStorage.getItem('admin_token_data');
+        const tokenData = localStorage.getItem("admin_token_data");
         if (tokenData) {
           try {
             const parsed = JSON.parse(tokenData);
-            const isExpired = Date.now() > (parsed.timestamp + parsed.expiresIn);
-            
+            const isExpired = Date.now() > parsed.timestamp + parsed.expiresIn;
+
             if (isExpired) {
-              console.log('🕐 Token expired after 1 month, clearing auth');
-              localStorage.removeItem('admin_token');
-              localStorage.removeItem('admin_user');
-              localStorage.removeItem('admin_token_data');
+              console.log("🕐 Token expired after 1 month, clearing auth");
+              localStorage.removeItem("admin_token");
+              localStorage.removeItem("admin_user");
+              localStorage.removeItem("admin_token_data");
               setUser(null);
               return false;
             }
           } catch (e) {
             // If token data is corrupted, just keep the auth
-            console.log('Token data corrupted, but keeping auth');
+            console.log("Token data corrupted, but keeping auth");
           }
         }
-        
+
         setUser(parsedUser);
         return true;
       } catch (error) {
-        console.error('Error parsing stored user data:', error);
+        console.error("Error parsing stored user data:", error);
         // Don't clear storage, just reset user state
         setUser(null);
         return false;
@@ -62,101 +67,120 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    console.log('🚀 AuthProvider initializing...');
+    console.log("🚀 AuthProvider initializing...");
     checkAuth();
     setLoading(false);
 
     // Only listen for storage changes, no interval checking
     const handleStorageChange = (e) => {
-      if (e.key === 'admin_token' || e.key === 'admin_user') {
-        console.log('📦 Storage changed:', e.key, e.newValue ? 'SET' : 'REMOVED');
+      if (e.key === "admin_token" || e.key === "admin_user") {
+        console.log(
+          "📦 Storage changed:",
+          e.key,
+          e.newValue ? "SET" : "REMOVED"
+        );
         checkAuth();
       }
     };
 
-    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener("storage", handleStorageChange);
 
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener("storage", handleStorageChange);
     };
   }, []);
 
   const login = async (credentials) => {
     try {
-      console.log('🚀 Login attempt:', credentials);
-      
+      console.log("🚀 Login attempt:", credentials);
+
       const response = await authAPI.adminLogin(credentials);
-      console.log('✅ API Response:', response.data);
-      
+      console.log("✅ API Response:", response.data);
+
       if (response.data && response.data.success) {
         const { token, admin: userData } = response.data;
-        
+
         // Set token with 1 month expiry - simple and straightforward
         const tokenData = {
           token: token,
           timestamp: Date.now(),
-          expiresIn: 30 * 24 * 60 * 60 * 1000 // 1 month (30 days) in milliseconds
+          expiresIn: 30 * 24 * 60 * 60 * 1000, // 1 month (30 days) in milliseconds
         };
-        
-        localStorage.setItem('admin_token', token);
-        localStorage.setItem('admin_token_data', JSON.stringify(tokenData));
-        localStorage.setItem('admin_user', JSON.stringify(userData));
-        
+
+        localStorage.setItem("admin_token", token);
+        localStorage.setItem("admin_token_data", JSON.stringify(tokenData));
+        localStorage.setItem("admin_user", JSON.stringify(userData));
+
         setUser(userData);
-        console.log('✅ Login successful, token valid for 1 month');
+        console.log("✅ Login successful, token valid for 1 month");
         return { success: true };
       } else {
-        return { success: false, error: response.data?.message || 'Login failed' };
+        return {
+          success: false,
+          error: response.data?.message || "Login failed",
+        };
       }
     } catch (error) {
-      console.error('❌ Login error:', error);
-      
-      // For development - create long-lasting mock token
-      console.log('🔧 Creating development token (1 month expiry)');
-      const mockToken = 'dev-token-' + Date.now();
-      const mockUser = {
-        _id: 'dev-admin-id',
-        username: credentials.username || 'admin',
-        email: 'admin@test.com',
-        role: 'admin'
-      };
-      
-      const tokenData = {
-        token: mockToken,
-        timestamp: Date.now(),
-        expiresIn: 30 * 24 * 60 * 60 * 1000 // 1 month
-      };
-      
-      localStorage.setItem('admin_token', mockToken);
-      localStorage.setItem('admin_token_data', JSON.stringify(tokenData));
-      localStorage.setItem('admin_user', JSON.stringify(mockUser));
-      
-      setUser(mockUser);
-      return { success: true, message: 'Development mode - 1 month token created' };
+      console.warn("❌ Admin login failed, trying agent login...");
+      // Try agent login with identifier (email or mobile)
+      try {
+        const agentResp = await agentAPI.login({
+          identifier: credentials.username,
+          password: credentials.password,
+        });
+        if (agentResp.data?.success) {
+          const { token, agent } = agentResp.data.data
+            ? agentResp.data.data
+            : agentResp.data;
+          const tokenData = {
+            token,
+            timestamp: Date.now(),
+            expiresIn: 30 * 24 * 60 * 60 * 1000,
+          };
+          const userData = {
+            _id: agent._id,
+            name: agent.fullName,
+            email: agent.email,
+            role: "agent",
+            referralCode: agent.referralCode,
+          };
+          localStorage.setItem("admin_token", token);
+          localStorage.setItem("admin_token_data", JSON.stringify(tokenData));
+          localStorage.setItem("admin_user", JSON.stringify(userData));
+          setUser(userData);
+          return { success: true };
+        }
+      } catch (e2) {
+        console.error(
+          "❌ Agent login failed:",
+          e2?.response?.data || e2.message
+        );
+        return { success: false, error: "Invalid credentials" };
+      }
     }
   };
 
   const logout = () => {
-    console.log('🚪 Logging out...');
-    localStorage.removeItem('admin_token');
-    localStorage.removeItem('admin_token_data');
-    localStorage.removeItem('admin_user');
+    console.log("🚪 Logging out...");
+    localStorage.removeItem("admin_token");
+    localStorage.removeItem("admin_token_data");
+    localStorage.removeItem("admin_user");
     setUser(null);
   };
 
   // Force login function for debugging
   const forceLogin = (token, userData) => {
-    console.log('🔧 Force login with:', { token: !!token, user: !!userData });
-    
+    console.log("🔧 Force login with:", { token: !!token, user: !!userData });
+
     const tokenData = {
       token: token,
       timestamp: Date.now(),
-      expiresIn: 24 * 60 * 60 * 1000 // 24 hours
+      expiresIn: 24 * 60 * 60 * 1000, // 24 hours
     };
-    
-    localStorage.setItem('admin_token', token);
-    localStorage.setItem('admin_token_data', JSON.stringify(tokenData));
-    localStorage.setItem('admin_user', JSON.stringify(userData));
+
+    localStorage.setItem("admin_token", token);
+    localStorage.setItem("admin_token_data", JSON.stringify(tokenData));
+    localStorage.setItem("admin_user", JSON.stringify(userData));
     setUser(userData);
   };
 
@@ -167,12 +191,8 @@ export const AuthProvider = ({ children }) => {
     loading,
     isAuthenticated: !!user,
     forceLogin,
-    checkAuth
+    checkAuth,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

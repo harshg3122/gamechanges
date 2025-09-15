@@ -70,6 +70,15 @@ export const authAPI = {
   refresh: () => api.post("/admin-panel/refresh", {}),
 };
 
+// Agent API (auth + limited data)
+export const agentAPI = {
+  login: (credentials) => api.post("/agent/login", credentials),
+  dashboard: () => api.get("/agent/dashboard"),
+  listUsers: () => api.get("/agent/users"),
+  addUser: (data) => api.post("/agent/add-user", data),
+  results: (params) => api.get("/agent/results", { params }),
+};
+
 // Admin API calls - Updated with correct endpoints
 export const adminAPI = {
   // Dashboard
