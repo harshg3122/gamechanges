@@ -1,16 +1,25 @@
-import React, { useState } from 'react';
-import { Container, Row, Col, Card, Form, Button, Alert, Spinner } from 'react-bootstrap';
-import { FaEye, FaEyeSlash, FaUser, FaLock } from 'react-icons/fa';
-import { useAuth } from '../../contexts/AuthContext';
-import './Login.css';
+import React, { useState } from "react";
+import {
+  Container,
+  Row,
+  Col,
+  Card,
+  Form,
+  Button,
+  Alert,
+  Spinner,
+} from "react-bootstrap";
+import { FaEye, FaEyeSlash, FaUser, FaLock } from "react-icons/fa";
+import { useAuth } from "../../contexts/AuthContext";
+import "./Login.css";
 
 const Login = () => {
   const [formData, setFormData] = useState({
-    username: '', // Changed from 'identifier' to 'username'
-    password: ''
+    username: "", // Changed from 'identifier' to 'username'
+    password: "",
   });
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const { login } = useAuth();
@@ -18,26 +27,27 @@ const Login = () => {
   const handleChange = (e) => {
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     });
-    setError('');
+    setError("");
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!formData.username || !formData.password) { // Changed from identifier to username
-      setError('Please fill in all fields');
+
+    if (!formData.username || !formData.password) {
+      // Changed from identifier to username
+      setError("Please fill in all fields");
       return;
     }
 
     setLoading(true);
     const result = await login(formData);
-    
+
     if (!result.success) {
       setError(result.error);
     }
-    
+
     setLoading(false);
   };
 
@@ -53,7 +63,7 @@ const Login = () => {
             <Card className="login-card shadow">
               <Card.Body className="p-4">
                 <div className="text-center mb-4">
-                  <h2 className="login-title">Admin Panel</h2>
+                  <h2 className="login-title">Admin & Agent Panel</h2>
                   <p className="text-muted">Sign in to your account</p>
                 </div>
 
@@ -65,20 +75,25 @@ const Login = () => {
 
                 <Form onSubmit={handleSubmit}>
                   <Form.Group className="mb-3">
-                    <Form.Label>Username or Email</Form.Label>
+                    <Form.Label>Username, Email, Mobile, or Name</Form.Label>
                     <div className="input-group">
                       <span className="input-group-text">
                         <FaUser />
                       </span>
                       <Form.Control
                         type="text"
-                        name="username" // Changed from 'identifier' to 'username'
-                        placeholder="Enter username"
-                        value={formData.username} // Changed from identifier to username
+                        name="username"
+                        placeholder="Enter username, email, mobile, or name"
+                        value={formData.username}
                         onChange={handleChange}
                         required
                       />
                     </div>
+                    <Form.Text className="text-muted">
+                      For Admin: use "admin"
+                      <br />
+                      For Agents: use mobile number, email, or full name
+                    </Form.Text>
                   </Form.Group>
 
                   <Form.Group className="mb-3">
@@ -88,7 +103,7 @@ const Login = () => {
                         <FaLock />
                       </span>
                       <Form.Control
-                        type={showPassword ? 'text' : 'password'}
+                        type={showPassword ? "text" : "password"}
                         name="password"
                         placeholder="Enter your password"
                         value={formData.password}
@@ -129,7 +144,7 @@ const Login = () => {
                         Signing in...
                       </>
                     ) : (
-                      'Sign In'
+                      "Sign In"
                     )}
                   </Button>
                 </Form>

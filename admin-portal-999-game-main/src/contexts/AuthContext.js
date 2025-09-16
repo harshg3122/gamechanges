@@ -92,39 +92,88 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (credentials) => {
     try {
-      console.log("🚀 Admin login attempt:", credentials);
+      console.log("🚀 Login attempt:", credentials);
 
-      const response = await authAPI.adminLogin(credentials);
-      console.log("✅ API Response:", response.data);
+      // First try admin login (only if username is "admin")
+      if (credentials.username === "admin") {
+        try {
+          const response = await authAPI.adminLogin(credentials);
+          console.log("✅ Admin API Response:", response.data);
 
-      if (response.data && response.data.success) {
-        const { token, admin: userData } = response.data;
+          if (response.data && response.data.success) {
+            const { token, admin: userData } = response.data;
 
-        // Set token with 1 month expiry - simple and straightforward
-        const tokenData = {
-          token: token,
-          timestamp: Date.now(),
-          expiresIn: 30 * 24 * 60 * 60 * 1000, // 1 month (30 days) in milliseconds
-        };
+            // Set token with 1 month expiry - simple and straightforward
+            const tokenData = {
+              token: token,
+              timestamp: Date.now(),
+              expiresIn: 30 * 24 * 60 * 60 * 1000, // 1 month (30 days) in milliseconds
+            };
 
-        localStorage.setItem("admin_token", token);
-        localStorage.setItem("admin_token_data", JSON.stringify(tokenData));
-        localStorage.setItem(
-          "admin_user",
-          JSON.stringify({ ...userData, role: "admin" })
-        );
+            localStorage.setItem("admin_token", token);
+            localStorage.setItem("admin_token_data", JSON.stringify(tokenData));
+            localStorage.setItem(
+              "admin_user",
+              JSON.stringify({ ...userData, role: "admin" })
+            );
 
-        setUser({ ...userData, role: "admin" });
-        console.log("✅ Admin login successful, token valid for 1 month");
-        return { success: true };
-      } else {
-        return {
-          success: false,
-          error: response.data?.message || "Invalid credentials",
-        };
+            setUser({ ...userData, role: "admin" });
+            console.log("✅ Admin login successful, token valid for 1 month");
+            return { success: true };
+          }
+        } catch (adminError) {
+          console.log(
+            "❌ Admin login failed:",
+            adminError.response?.data?.message
+          );
+        }
       }
+
+      // Try agent login for all other cases
+      try {
+        console.log("🔄 Trying agent login...");
+        // Convert username to identifier for agent login
+        const agentCredentials = {
+          identifier: credentials.username,
+          password: credentials.password,
+        };
+        const response = await agentAPI.login(agentCredentials);
+        console.log("✅ Agent API Response:", response.data);
+
+        if (response.data && response.data.success) {
+          const { token, agent: userData } = response.data;
+
+          // Set token with 1 month expiry
+          const tokenData = {
+            token: token,
+            timestamp: Date.now(),
+            expiresIn: 30 * 24 * 60 * 60 * 1000, // 1 month (30 days) in milliseconds
+          };
+
+          localStorage.setItem("admin_token", token);
+          localStorage.setItem("admin_token_data", JSON.stringify(tokenData));
+          localStorage.setItem(
+            "admin_user",
+            JSON.stringify({ ...userData, role: "agent" })
+          );
+
+          setUser({ ...userData, role: "agent" });
+          console.log("✅ Agent login successful, token valid for 1 month");
+          return { success: true };
+        }
+      } catch (agentError) {
+        console.log(
+          "❌ Agent login failed:",
+          agentError.response?.data?.message
+        );
+      }
+
+      return {
+        success: false,
+        error: "Invalid credentials",
+      };
     } catch (error) {
-      console.error("❌ Admin login error:", error);
+      console.error("❌ Login error:", error);
       return {
         success: false,
         error: error.response?.data?.message || "Invalid credentials",

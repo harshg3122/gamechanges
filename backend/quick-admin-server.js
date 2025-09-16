@@ -232,6 +232,37 @@ async function createAdmin() {
   }
 }
 
+// Setup agent passwords
+async function setupAgentPasswords() {
+  try {
+    const agents = await Agent.find();
+    console.log(`🔍 Found ${agents.length} agents, setting up passwords...`);
+
+    for (const agent of agents) {
+      // Set mobile number as password for easy testing
+      const newPassword = agent.mobile;
+      const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+      await Agent.findByIdAndUpdate(agent._id, {
+        password: hashedPassword,
+      });
+
+      console.log(
+        `✅ ${agent.fullName}: Password set to mobile (${agent.mobile})`
+      );
+    }
+
+    console.log("\n📋 Login Credentials:");
+    console.log("Admin: admin / admin123");
+    console.log("Agents: Use mobile number as both username and password");
+    for (const agent of agents) {
+      console.log(`${agent.fullName}: ${agent.mobile} / ${agent.mobile}`);
+    }
+  } catch (error) {
+    console.error("❌ Error setting up agent passwords:", error);
+  }
+}
+
 // Admin login endpoint
 app.post("/api/admin-panel/login", async (req, res) => {
   try {
@@ -289,6 +320,69 @@ app.post("/api/admin-panel/login", async (req, res) => {
   }
 });
 
+// Agent login endpoint
+app.post("/api/agent/login", async (req, res) => {
+  try {
+    const { identifier, password } = req.body; // identifier can be mobile, email, or fullName
+
+    console.log("🔐 Agent login attempt:", identifier);
+
+    const agent = await Agent.findOne({
+      $or: [
+        { mobile: identifier },
+        { email: identifier },
+        { fullName: identifier },
+      ],
+      isActive: true,
+    });
+
+    if (!agent) {
+      console.log("❌ Agent not found or inactive");
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials or agent inactive",
+      });
+    }
+
+    const isMatch = await bcrypt.compare(password, agent.password);
+    if (!isMatch) {
+      console.log("❌ Password mismatch");
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials",
+      });
+    }
+
+    const token = jwt.sign(
+      { agentId: agent._id, role: "agent" },
+      process.env.JWT_SECRET || "game999secret",
+      { expiresIn: "24h" }
+    );
+
+    console.log("✅ Agent login successful:", agent.fullName);
+
+    res.json({
+      success: true,
+      message: "Login successful",
+      token,
+      agent: {
+        _id: agent._id,
+        fullName: agent.fullName,
+        mobile: agent.mobile,
+        email: agent.email,
+        referralCode: agent.referralCode,
+        role: "agent",
+      },
+    });
+  } catch (error) {
+    console.error("❌ Agent login error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error logging in",
+    });
+  }
+});
+
 // Get all agents endpoint
 app.get("/api/admin-panel/agents", async (req, res) => {
   try {
@@ -302,6 +396,111 @@ app.get("/api/admin-panel/agents", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error fetching agents",
+    });
+  }
+});
+
+// Agent dashboard endpoint
+app.get("/api/agent/dashboard", async (req, res) => {
+  try {
+    // For now, return basic dashboard data
+    // In a real app, you'd verify the agent token here
+    res.json({
+      success: true,
+      data: {
+        message: "Agent dashboard data",
+        stats: {
+          totalUsers: 0,
+          activeUsers: 0,
+          totalCommission: 0,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("❌ Error fetching agent dashboard:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching dashboard",
+    });
+  }
+});
+
+// Get agent's users endpoint
+app.get("/api/agent/users", async (req, res) => {
+  try {
+    // For now, return all users - in real app, filter by agentId
+    const users = await User.find().sort({ createdAt: -1 });
+    res.json({
+      success: true,
+      data: users,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching agent users:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching users",
+    });
+  }
+});
+
+// Add user by agent endpoint
+app.post("/api/agent/add-user", async (req, res) => {
+  try {
+    const { fullName, mobile, password } = req.body;
+
+    console.log("🔄 Agent adding user:", { fullName, mobile });
+
+    // Check if mobile already exists
+    const existingUser = await User.findOne({ mobileNumber: mobile });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "Mobile number already exists",
+      });
+    }
+
+    const user = new User({
+      username: `u${mobile}`,
+      mobileNumber: mobile,
+      passwordHash: password || "defaultpass123",
+      wallet: 0,
+      isActive: true,
+      // In real app, you'd get agentId from the token
+      agentId: null,
+      referral: "",
+    });
+
+    await user.save();
+
+    console.log("✅ User added by agent:", user.username);
+
+    res.status(201).json({
+      success: true,
+      message: "User added successfully",
+      data: user,
+    });
+  } catch (error) {
+    console.error("❌ Error adding user:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error adding user",
+    });
+  }
+});
+
+// Get results for agent
+app.get("/api/agent/results", async (req, res) => {
+  try {
+    // For now, return empty results - you can implement this based on your results schema
+    res.json({
+      success: true,
+      data: [],
+    });
+  } catch (error) {
+    console.error("❌ Error fetching results:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching results",
     });
   }
 });
@@ -730,8 +929,14 @@ app.get("/health", (req, res) => {
 
 // Start server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Quick Admin Server running on port ${PORT}`);
   console.log(`🌐 Health check: http://localhost:${PORT}/health`);
-  createAdmin();
+
+  try {
+    await createAdmin();
+    await setupAgentPasswords();
+  } catch (error) {
+    console.error("❌ Error during startup:", error);
+  }
 });
