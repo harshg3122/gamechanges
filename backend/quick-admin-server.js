@@ -519,9 +519,14 @@ app.get("/api/admin-panel/users", async (req, res) => {
 // Create new user endpoint
 app.post("/api/admin-panel/users", async (req, res) => {
   try {
-    const { username, email, mobileNumber, password } = req.body;
+    const { username, email, mobileNumber, password, agentId } = req.body;
 
-    console.log("🔄 Creating user:", { username, email, mobileNumber });
+    console.log("🔄 Creating user:", {
+      username,
+      email,
+      mobileNumber,
+      agentId,
+    });
 
     // Clean up mobile number
     const cleanMobileNumber =
@@ -546,6 +551,23 @@ app.post("/api/admin-panel/users", async (req, res) => {
       });
     }
 
+    // If agentId is provided, get the agent's referral code
+    let referralCode = "";
+    if (agentId) {
+      const agent = await Agent.findById(agentId);
+      if (agent) {
+        referralCode = agent.referralCode;
+        console.log(
+          "✅ User will be linked to agent:",
+          agent.fullName,
+          "with referral code:",
+          referralCode
+        );
+      } else {
+        console.log("⚠️ Agent not found for ID:", agentId);
+      }
+    }
+
     const user = new User({
       username,
       email: email || undefined,
@@ -553,9 +575,19 @@ app.post("/api/admin-panel/users", async (req, res) => {
       passwordHash: password || "defaultpass123",
       wallet: 0,
       isActive: true,
+      ...(agentId && { agentId }), // Link to agent if provided
+      ...(referralCode && { referral: referralCode }), // Set referral code
     });
 
     await user.save();
+
+    // If user is linked to an agent, add user to agent's users array
+    if (agentId) {
+      await Agent.findByIdAndUpdate(agentId, {
+        $push: { users: user._id },
+      });
+      console.log("✅ User added to agent's users list");
+    }
 
     console.log("✅ User created successfully:", user.username);
 

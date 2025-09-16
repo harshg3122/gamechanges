@@ -74,13 +74,11 @@ const AdminManagement = () => {
       setLoading(true);
       const response = await adminAPI.getAgents();
 
-      if (
-        response.data &&
-        response.data.success &&
-        response.data.data &&
-        response.data.data.agents
-      ) {
-        setAgents(response.data.data.agents);
+      if (response.data && response.data.success && response.data.data) {
+        // Handle both response.data.data.agents and response.data.data directly
+        const agentsData = response.data.data.agents || response.data.data;
+        setAgents(Array.isArray(agentsData) ? agentsData : []);
+        console.log("✅ Agents loaded:", agentsData.length);
       } else {
         console.error("Invalid response structure:", response.data);
         setAgents([]);

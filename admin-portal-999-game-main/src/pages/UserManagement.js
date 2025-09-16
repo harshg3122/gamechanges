@@ -66,7 +66,12 @@ const UserManagement = () => {
     email: "",
     mobileNumber: "",
     password: "",
+    agentId: "", // Add agent selection
   });
+
+  // Add agents state for dropdown
+  const [agents, setAgents] = useState([]);
+  const [loadingAgents, setLoadingAgents] = useState(false);
 
   // Load users from API
   useEffect(() => {
@@ -74,8 +79,34 @@ const UserManagement = () => {
 
     if (isAuthenticated) {
       loadUsers();
+      // Only load agents for admin users
+      if (!isAgent) {
+        loadAgents();
+      }
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isAgent]);
+
+  // Load agents for dropdown (admin only)
+  const loadAgents = async () => {
+    try {
+      setLoadingAgents(true);
+      const response = await adminAPI.getAgents();
+
+      if (response.data && response.data.success && response.data.data) {
+        const agentsData = response.data.data.agents || response.data.data;
+        setAgents(Array.isArray(agentsData) ? agentsData : []);
+        console.log("✅ Agents loaded for dropdown:", agentsData.length);
+      } else {
+        console.error("Invalid agents response structure:", response.data);
+        setAgents([]);
+      }
+    } catch (error) {
+      console.error("Error loading agents for dropdown:", error);
+      setAgents([]);
+    } finally {
+      setLoadingAgents(false);
+    }
+  };
 
   const loadUsers = async () => {
     try {
@@ -434,7 +465,7 @@ const UserManagement = () => {
 
   const handleAddUserSubmit = async (e) => {
     e.preventDefault();
-    const { username, email, mobileNumber, password } = addUserForm;
+    const { username, email, mobileNumber, password, agentId } = addUserForm;
 
     if (!username || !email || !password) {
       showAlert(setAlert, "danger", "Please fill in all required fields.");
@@ -454,7 +485,15 @@ const UserManagement = () => {
           referralCode: user?.referralCode,
         });
       } else {
-        response = await adminAPI.createUser(addUserForm);
+        // Include agentId in admin user creation
+        const userData = {
+          username,
+          email,
+          mobileNumber,
+          password,
+          ...(agentId && { agentId }), // Only include agentId if selected
+        };
+        response = await adminAPI.createUser(userData);
       }
 
       if (response.data.success) {
@@ -1104,6 +1143,43 @@ User: ${user ? user.username : 'none'}`);
                 </Form.Group>
               </Col>
             </Row>
+
+            {/* Agent Selection - Only show for admin users */}
+            {!isAgent && (
+              <Row>
+                <Col md={12}>
+                  <Form.Group className="mb-3">
+                    <Form.Label>Assign to Agent</Form.Label>
+                    <Form.Select
+                      value={addUserForm.agentId}
+                      onChange={(e) =>
+                        setAddUserForm({
+                          ...addUserForm,
+                          agentId: e.target.value,
+                        })
+                      }
+                      disabled={loadingAgents}
+                    >
+                      <option value="">Select an agent (optional)</option>
+                      {agents.map((agent) => (
+                        <option key={agent._id} value={agent._id}>
+                          {agent.fullName} - {agent.referralCode}
+                        </option>
+                      ))}
+                    </Form.Select>
+                    {loadingAgents && (
+                      <Form.Text className="text-muted">
+                        Loading agents...
+                      </Form.Text>
+                    )}
+                    <Form.Text className="text-muted">
+                      Choose an agent to associate this user with. This will
+                      link the user to the agent's referral code.
+                    </Form.Text>
+                  </Form.Group>
+                </Col>
+              </Row>
+            )}
           </Form>
         </Modal.Body>
         <Modal.Footer>
