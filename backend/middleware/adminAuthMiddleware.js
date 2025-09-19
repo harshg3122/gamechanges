@@ -45,7 +45,7 @@ const adminAuthMiddleware = async (req, res, next) => {
       return next();
     }
 
-    console.log("Verifying token:", token.substring(0, 20) + "...");
+    console.log("Verifying admin token:", token.substring(0, 20) + "...");
     const decoded = jwt.verify(
       token,
       process.env.JWT_SECRET ||
@@ -54,10 +54,20 @@ const adminAuthMiddleware = async (req, res, next) => {
 
     console.log("Decoded token:", decoded);
 
-    // Verify admin exists and is active
-    const admin = await Admin.findById(decoded.adminId);
+    // Reject if this is not an admin token
+    if (decoded.role !== "admin" && decoded.userType !== "admin") {
+      console.log("Token is not for admin, role:", decoded.role);
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Admin access required.",
+      });
+    }
+
+    // Verify admin exists and is active - handle both adminId and id fields
+    const adminId = decoded.adminId || decoded.id;
+    const admin = await Admin.findById(adminId);
     if (!admin) {
-      console.log("Admin not found for ID:", decoded.adminId);
+      console.log("Admin not found for ID:", adminId);
       return res.status(401).json({
         success: false,
         message: "Invalid token. Admin not found",

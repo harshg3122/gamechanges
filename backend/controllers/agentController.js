@@ -12,6 +12,8 @@ const JWT_SECRET = process.env.JWT_SECRET || "game999secret";
 
 exports.loginAgent = async (req, res) => {
   try {
+    console.log("Agent login attempt:", req.body);
+
     // Accept mobile, email, identifier, or username from the body
     const identifier =
       req.body.mobile ||
@@ -19,40 +21,90 @@ exports.loginAgent = async (req, res) => {
       req.body.username ||
       req.body.email;
     const { password } = req.body;
+
     if (!identifier || !password) {
       return res.status(400).json({
         success: false,
         message: "Identifier and password are required",
       });
     }
+
     const agent = await Agent.findOne({
       $or: [
         { mobile: identifier },
         { email: (identifier || "").toLowerCase() },
       ],
     });
+
     if (!agent) {
       return res
         .status(401)
         .json({ success: false, message: "Invalid mobile or password" });
     }
+
     const isMatch = await bcrypt.compare(password, agent.password);
     if (!isMatch) {
       return res
         .status(401)
         .json({ success: false, message: "Invalid mobile or password" });
     }
-    const token = jwt.sign({ id: agent._id, role: "agent" }, JWT_SECRET, {
-      expiresIn: "12h",
-    });
+
+    // Generate JWT token with clear agent identification
+    const token = jwt.sign(
+      {
+        id: agent._id,
+        role: "agent",
+        userType: "agent", // Clear identifier
+        agentId: agent._id, // Additional identifier
+      },
+      JWT_SECRET,
+      {
+        expiresIn: "12h",
+      }
+    );
+
+    console.log(`Agent login successful for: ${agent.mobile}`);
+
     res.json({
       success: true,
       message: "Login successful",
-      data: { token, agent },
+      userType: "agent",
+      data: {
+        token,
+        agent: {
+          id: agent._id,
+          mobile: agent.mobile,
+          email: agent.email,
+          fullName: agent.fullName,
+          referralCode: agent.referralCode,
+        },
+      },
     });
   } catch (error) {
     console.error("Agent login error:", error);
     res.status(500).json({ success: false, message: "Error logging in" });
+  }
+};
+
+// Agent Logout
+exports.logoutAgent = async (req, res) => {
+  try {
+    console.log("Agent logout requested");
+
+    // In a stateless JWT system, logout is mainly handled on the frontend
+    // by removing the token. But we can add server-side logic if needed.
+
+    res.json({
+      success: true,
+      message: "Logged out successfully",
+      userType: "agent",
+    });
+  } catch (error) {
+    console.error("Agent logout error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error during logout",
+    });
   }
 };
 

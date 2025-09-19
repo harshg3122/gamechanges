@@ -3,63 +3,81 @@ const Bet = require("../models/Bet");
 const SingleDigit = require("../models/SingleDigit");
 const TripleDigit = require("../models/TripleDigit");
 const Round = require("../models/Round");
-const LockedNumber = require("../models/LockedNumber");
-const {
-  isNumberLocked,
-  getUnlockedTripleDigit,
-  updateLockingMechanismByRoundId,
-} = require("../utils/lockingMechanism");
-
-// Helper: calculate single digit from triple digit
-function getSingleDigit(triple) {
-  const sum = triple.split("").reduce((acc, d) => acc + parseInt(d, 10), 0);
-  return (sum % 10).toString();
-}
-
-// Helper: check if single digit is locked
-async function isSingleDigitLocked(roundId, digit) {
-  return await isNumberLocked(roundId, "single", digit.toString());
-}
+const NumberSelection = require("../models/NumberSelection");
+const User = require("../models/User");
+const Transaction = require("../models/Transaction");
+const resultService = require("../services/resultService");
+const { calculateSingleDigitFromTriple } = require("../utils/numberGenerator");
 
 // GET /api/results/profit-numbers?roundId=...
 const getProfitNumbers = async (req, res) => {
   try {
     const { roundId } = req.query;
-    if (!roundId)
-      return res
-        .status(400)
-        .json({ success: false, message: "Missing roundId" });
-    const round = await Round.findById(roundId);
-    if (!round)
-      return res
-        .status(404)
-        .json({ success: false, message: "Round not found" });
 
-    // Initialize locking mechanism if not already done
-    await updateLockingMechanismByRoundId(roundId);
-
-    // Get all bets for this round, class A (single digit)
-    const bets = await Bet.find({ roundId, gameClass: "A" });
-    const numberStats = {};
-    for (const bet of bets) {
-      const num = bet.selectedNumber;
-      if (!numberStats[num]) numberStats[num] = { tokens: 0 };
-      numberStats[num].tokens += bet.betAmount;
+    if (!roundId) {
+      return res.status(400).json({
+        success: false,
+        message: "roundId is required",
+      });
     }
-    // For each single digit, check lock status
-    const profitNumbers = await Promise.all(
-      Object.entries(numberStats).map(async ([number, stat]) => {
-        const locked = await isNumberLocked(roundId, "single", number);
-        return {
-          number,
-          tokens: stat.tokens,
-          locked,
+
+    // Get all bets for the round
+    const bets = await NumberSelection.find({ roundId });
+
+    // Calculate profit for each possible winning number
+    const profitAnalysis = {};
+
+    // For single digits (0-9)
+    for (let digit = 0; digit <= 9; digit++) {
+      const digitBets = bets.filter(
+        (bet) => bet.classType === "D" && bet.number === digit.toString()
+      );
+      const totalBetAmount = digitBets.reduce(
+        (sum, bet) => sum + bet.amount,
+        0
+      );
+      const potentialPayout = totalBetAmount * 9; // 9x multiplier for single digit
+
+      profitAnalysis[`single_${digit}`] = {
+        type: "single",
+        number: digit,
+        totalBets: digitBets.length,
+        totalBetAmount,
+        potentialPayout,
+        houseProfit: totalBetAmount - potentialPayout,
+      };
+    }
+
+    // For triple digits, we'll analyze the most bet numbers
+    const tripleDigitBets = bets.filter((bet) => bet.classType !== "D");
+    const tripleDigitSummary = {};
+
+    tripleDigitBets.forEach((bet) => {
+      if (!tripleDigitSummary[bet.number]) {
+        tripleDigitSummary[bet.number] = {
+          totalBets: 0,
+          totalAmount: 0,
         };
-      })
-    );
-    res.status(200).json({ success: true, profitNumbers });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+      }
+      tripleDigitSummary[bet.number].totalBets += 1;
+      tripleDigitSummary[bet.number].totalAmount += bet.amount;
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        singleDigitAnalysis: profitAnalysis,
+        tripleDigitSummary,
+        totalBets: bets.length,
+        totalBetAmount: bets.reduce((sum, bet) => sum + bet.amount, 0),
+      },
+    });
+  } catch (error) {
+    console.error("Error getting profit numbers:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   }
 };
 
@@ -67,391 +85,296 @@ const getProfitNumbers = async (req, res) => {
 const declareResult = async (req, res) => {
   try {
     const { roundId, tripleDigitNumber } = req.body;
+
     if (!roundId || !tripleDigitNumber) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Missing roundId or tripleDigitNumber",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Missing roundId or tripleDigitNumber",
+      });
     }
-    const round = await Round.findById(roundId);
-    if (!round)
-      return res
-        .status(404)
-        .json({ success: false, message: "Round not found" });
-    const date = round.gameDate
-      ? round.gameDate.toISOString().slice(0, 10)
-      : new Date().toISOString().slice(0, 10);
-    const timeSlot = round.timeSlot;
 
-    // Initialize locking mechanism if not already done
-    await updateLockingMechanismByRoundId(roundId);
+    // Get admin ID from request (assuming it's set by auth middleware)
+    const adminId = req.admin ? req.admin._id : req.user ? req.user._id : null;
 
-    // First check if the provided triple digit is locked
-    const tripleDigitLocked = await isNumberLocked(
+    // Declare result using the service
+    const result = await resultService.declareResultByAdmin(
       roundId,
-      "triple",
-      tripleDigitNumber
+      tripleDigitNumber,
+      adminId
     );
-    if (tripleDigitLocked) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "The selected triple digit number is locked. Please choose another number.",
-      });
+
+    if (!result.success) {
+      return res.status(400).json(result);
     }
 
-    // Calculate the single digit result from the triple digit
-    let triple = tripleDigitNumber;
-    let singleDigit = getSingleDigit(triple);
-
-    // Check if the resulting single digit is locked
-    let singleDigitLocked = await isNumberLocked(
-      roundId,
-      "single",
-      singleDigit
-    );
-    if (singleDigitLocked) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "The resulting single digit is locked. Please choose another triple digit number.",
-      });
-    }
-
-    // Check if a result already exists for this round
-    const existingResult = await Result.findOne({ roundId });
-    if (existingResult) {
-      return res.status(400).json({
-        success: false,
-        message: "A result has already been declared for this round.",
-      });
-    }
-
-    // Save result
-    const result = new Result({
-      roundId,
-      date,
-      timeSlot,
-      tripleDigitNumber: triple,
-      singleDigitResult: singleDigit,
-    });
-    await result.save();
-
-    // Update round status to indicate result has been declared
-    await Round.findByIdAndUpdate(roundId, { status: "completed" });
-
-    // Process bets for this round
-    await processBetsForRound(roundId, singleDigit);
-
-    res.status(201).json({
-      success: true,
-      result,
-      message: `Result declared successfully: Triple digit ${triple} results in single digit ${singleDigit}`,
-    });
+    res.status(200).json(result);
   } catch (err) {
-    console.error("Error declaring result:", err);
-    res.status(500).json({ success: false, message: err.message });
+    console.error("Error in declareResult controller:", err);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   }
 };
-
-// Process bets for a round after result declaration
-async function processBetsForRound(roundId, winningDigit) {
-  try {
-    console.log(
-      `Processing bets for round ${roundId} with winning digit ${winningDigit}`
-    );
-
-    // Get all bets for this round
-    const bets = await Bet.find({ roundId, status: "pending" });
-    console.log(`Found ${bets.length} bets to process`);
-
-    // Process each bet
-    for (const bet of bets) {
-      // Check if bet wins
-      const isWinning = bet.selectedNumber === winningDigit;
-
-      // Calculate payout based on game class
-      let payout = 0;
-      if (isWinning) {
-        // Get payout multiplier from settings
-        const settings = await Settings.findOne({});
-        const multiplier = settings?.payoutMultiplier || 9; // Default to 9x if not set
-
-        payout = bet.betAmount * multiplier;
-
-        // Update user balance
-        await User.findByIdAndUpdate(bet.userId, {
-          $inc: { walletBalance: payout },
-        });
-
-        // Create transaction record for winning
-        const transaction = new Transaction({
-          userId: bet.userId,
-          type: "bet_win",
-          amount: payout,
-          status: "completed",
-          description: `Won bet on ${bet.gameClass}-${bet.selectedNumber}`,
-        });
-        await transaction.save();
-      }
-
-      // Update bet status
-      bet.status = isWinning ? "won" : "lost";
-      bet.payout = isWinning ? payout : 0;
-      await bet.save();
-    }
-
-    console.log(`Processed ${bets.length} bets for round ${roundId}`);
-  } catch (error) {
-    console.error("Error processing bets:", error);
-  }
-}
 
 // GET /api/results/view?roundId=...
 const viewResult = async (req, res) => {
   try {
     const { roundId } = req.query;
-    if (!roundId)
-      return res
-        .status(400)
-        .json({ success: false, message: "Missing roundId" });
-    let result = await Result.findOne({ roundId });
-    if (result) {
-      return res.status(200).json({ success: true, result });
+    if (!roundId) {
+      return res.status(400).json({
+        success: false,
+        message: "roundId is required",
+      });
     }
 
-    // No result yet, check if we are in the last 2 minutes of the slot
+    // Check if result exists using service
+    const resultResponse = await resultService.getResultForRound(roundId);
+    if (resultResponse.success) {
+      return res.status(200).json(resultResponse);
+    }
+
+    // If no result exists, check if we should auto-declare
     const round = await Round.findById(roundId);
-    if (!round)
-      return res
-        .status(404)
-        .json({ success: false, message: "Round not found" });
-    const now = new Date();
-    const timeSlot = round.timeSlot; // e.g., "10:00 AM - 11:00 AM"
-    // Parse slot end time
-    let slotEnd = null;
-    if (timeSlot) {
-      const match = timeSlot.match(/-\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-      if (match) {
-        let hour = parseInt(match[1], 10);
-        const minute = parseInt(match[2], 10);
-        const ampm = match[3].toUpperCase();
-        if (ampm === "PM" && hour !== 12) hour += 12;
-        if (ampm === "AM" && hour === 12) hour = 0;
-        slotEnd = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate(),
-          hour,
-          minute,
-          0,
-          0
-        );
-        // If slotEnd is in the past (e.g., after midnight), add a day
-        if (slotEnd < now && now.getHours() - hour > 2)
-          slotEnd.setDate(slotEnd.getDate() + 1);
-      }
+    if (!round) {
+      return res.status(404).json({
+        success: false,
+        message: "Round not found",
+      });
     }
-    if (!slotEnd) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid timeSlot format" });
-    }
-    const diffToEnd = (slotEnd - now) / 60000; // minutes until slot end
-    if (diffToEnd <= 2 && diffToEnd >= 0) {
-      // Auto-declare result in last 2 minutes
-      const date = round.gameDate
-        ? round.gameDate.toISOString().slice(0, 10)
-        : null;
 
-      // Initialize locking mechanism if not already done
-      await updateLockingMechanismByRoundId(roundId);
+    // Validate timing for auto-declaration
+    const timingValidation =
+      resultService.validateResultDeclarationTiming(round);
 
+    // If it's system period (last 1 minute or round ended), auto-declare
+    if (timingValidation.isSystemPeriod || timingValidation.roundEnded) {
       try {
-        // Get an unlocked triple digit
-        const triple = await getUnlockedTripleDigit(roundId);
-        const singleDigit = getSingleDigit(triple);
+        // Initialize numbers if not already done
+        await resultService.initializeRoundNumbers(roundId);
 
-        // Verify the single digit is not locked
-        const singleDigitLocked = await isNumberLocked(
-          roundId,
-          "single",
-          singleDigit
-        );
-        if (singleDigitLocked) {
-          // This is unlikely since we're selecting from unlocked triples
-          return res.status(400).json({
-            success: false,
-            message:
-              "Could not find a valid triple digit with unlocked single digit result.",
-          });
+        // Auto-generate result
+        const autoResult = await resultService.autoGenerateResult(roundId);
+
+        if (autoResult.success) {
+          return res.status(200).json(autoResult);
+        } else {
+          return res.status(400).json(autoResult);
         }
-        result = new Result({
-          roundId,
-          date,
-          timeSlot,
-          tripleDigitNumber: triple,
-          singleDigitResult: singleDigit,
-        });
-        await result.save();
-
-        // Process bets for this round
-        await processBetsForRound(roundId, singleDigit);
-
-        // Update round status to indicate result has been declared
-        await Round.findByIdAndUpdate(roundId, { status: "completed" });
-
-        return res
-          .status(200)
-          .json({ success: true, result, autoDeclared: true });
       } catch (error) {
-        return res
-          .status(404)
-          .json({
-            success: false,
-            message:
-              "No unlocked triple digit numbers found to declare result.",
-          });
+        console.error("Error in auto result generation:", error);
+        return res.status(500).json({
+          success: false,
+          message: "Error auto-generating result",
+        });
       }
     } else {
-      // Not in last 2 minutes
-      return res
-        .status(200)
-        .json({
-          success: false,
-          message:
-            "Result not declared yet. Auto-declare will happen in the last 2 minutes of the slot.",
-        });
+      // Not time for auto-declaration yet
+      return res.status(200).json({
+        success: false,
+        message: timingValidation.message,
+        timing: {
+          canDeclare: timingValidation.canDeclare,
+          isAdminPeriod: timingValidation.isAdminPeriod,
+          minutesToEnd: timingValidation.minutesToEnd,
+        },
+      });
     }
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error("Error in viewResult controller:", err);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   }
 };
 
-// GET /api/results/tables?roundId=...
+// GET /api/results/tables - Get current round tables
 const getTables = async (req, res) => {
   try {
     const { roundId } = req.query;
-    if (!roundId) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Missing roundId" });
+
+    // If no roundId provided, get current active round
+    let round;
+    if (roundId) {
+      round = await Round.findById(roundId);
+    } else {
+      round = await Round.findOne({ status: "active" }).sort({ createdAt: -1 });
     }
-    // Fetch round to get date and timeSlot
-    const round = await Round.findById(roundId);
+
     if (!round) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Round not found" });
+      return res.status(404).json({
+        success: false,
+        message: "No active round found",
+      });
     }
 
-    // Initialize locking mechanism if not already done
-    await updateLockingMechanismByRoundId(roundId);
+    // Initialize numbers for this round using the service
+    const roundNumbers = await resultService.initializeRoundNumbers(round._id);
 
-    // Get locked numbers for this round
-    const lockedNumbers = await LockedNumber.find({ roundId }).lean();
+    // Get all bets for this round to update token amounts
+    const bets = await NumberSelection.find({ roundId: round._id });
 
-    // Separate single and triple digits
-    const lockedSingleDigits = lockedNumbers.filter(
-      (ln) => ln.numberType === "single"
-    );
-    const lockedTripleDigits = lockedNumbers.filter(
-      (ln) => ln.numberType === "triple"
-    );
-
-    // Get all bets for this round to calculate tokens
-    const bets = await Bet.find({ roundId });
-
-    // Create single digit table with tokens and lock status
-    const singleDigitTable = Array.from({ length: 10 }, (_, i) => {
-      const digit = i.toString();
-      const isLocked = lockedSingleDigits.some((ln) => ln.number === digit);
-      const totalTokens = bets
-        .filter((bet) => bet.gameClass === "A" && bet.selectedNumber === digit)
-        .reduce((sum, bet) => sum + bet.betAmount, 0);
+    // Update single digit table with actual bet amounts
+    const singleDigitTable = roundNumbers.singleDigits.map((sd) => {
+      const digitBets = bets.filter(
+        (bet) => bet.classType === "D" && bet.number === sd.number.toString()
+      );
+      const actualTokens = digitBets.reduce((sum, bet) => sum + bet.amount, 0);
 
       return {
-        number: i,
-        tokens: totalTokens,
-        lock: isLocked,
+        number: sd.number,
+        tokens: actualTokens > 0 ? actualTokens : sd.tokens, // Use actual bets or generated tokens
+        lock: sd.locked,
       };
     });
 
-    // Create triple digit table - show only numbers with bets or locked status
-    const tripleDigitStats = {};
+    // Update triple digit table with actual bet amounts
+    const tripleDigitTable = roundNumbers.tripleDigits.map((td) => {
+      const numberBets = bets.filter(
+        (bet) => bet.classType !== "D" && bet.number === td.number
+      );
+      const actualTokens = numberBets.reduce((sum, bet) => sum + bet.amount, 0);
 
-    // Add bets data
-    bets
-      .filter((bet) => bet.gameClass !== "A" && bet.selectedNumber.length === 3)
-      .forEach((bet) => {
-        const number = bet.selectedNumber;
-        if (!tripleDigitStats[number]) {
-          tripleDigitStats[number] = { tokens: 0, classType: bet.gameClass };
-        }
-        tripleDigitStats[number].tokens += bet.betAmount;
-      });
-
-    // Add locked triple digits
-    lockedTripleDigits.forEach((ln) => {
-      if (!tripleDigitStats[ln.number]) {
-        tripleDigitStats[ln.number] = { tokens: 0, classType: "N/A" };
-      }
+      return {
+        number: parseInt(td.number),
+        classType: td.classType,
+        tokens: actualTokens > 0 ? actualTokens : td.tokens, // Use actual bets or generated tokens
+        sumDigits: td.sumDigits,
+        onesDigit: td.lastDigit,
+        lock: td.locked,
+      };
     });
 
-    // Create triple digit table
-    const tripleDigitTable = Object.entries(tripleDigitStats).map(
-      ([number, stats]) => {
-        const isLocked = lockedTripleDigits.some((ln) => ln.number === number);
-        const sum = number
-          .split("")
-          .reduce((acc, digit) => acc + parseInt(digit, 10), 0);
-        const onesDigit = sum % 10;
-
-        return {
-          number: parseInt(number, 10),
-          classType: stats.classType,
-          tokens: stats.tokens,
-          sumDigits: sum,
-          onesDigit: onesDigit,
-          lock: isLocked,
-        };
-      }
-    );
-
-    // Calculate statistics
     const statistics = {
       totalBets: bets.length,
-      totalBetAmount: bets.reduce((sum, bet) => sum + bet.betAmount, 0),
-      lockedSingleDigitEntries: lockedSingleDigits.length,
-      totalSingleDigitEntries: 10,
-      lockedTripleDigitEntries: lockedTripleDigits.length,
-      totalTripleDigitEntries: Object.keys(tripleDigitStats).length,
+      totalBetAmount: bets.reduce((sum, bet) => sum + bet.amount, 0),
+      lockedSingleDigitEntries: singleDigitTable.filter((s) => s.lock).length,
+      totalSingleDigitEntries: singleDigitTable.length,
+      lockedTripleDigitEntries: tripleDigitTable.filter((t) => t.lock).length,
+      totalTripleDigitEntries: tripleDigitTable.length,
     };
 
-    res.json({
+    res.status(200).json({
       success: true,
       data: {
+        roundId: round._id,
         singleDigitTable,
         tripleDigitTable,
         statistics,
       },
     });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+  } catch (error) {
+    console.error("Error getting tables:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   }
 };
 
-// GET /api/game/results (history)
+// GET /api/results/history
 const getResultHistory = async (req, res) => {
   try {
-    const results = await Result.find().sort({ createdAt: -1 }).limit(100);
-    res.status(200).json({ success: true, results });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+
+    const historyResponse = await resultService.getRecentResults(page, limit);
+
+    if (historyResponse.success) {
+      res.status(200).json({
+        success: true,
+        data: {
+          results: historyResponse.results,
+          pagination: historyResponse.pagination,
+        },
+      });
+    } else {
+      res.status(500).json(historyResponse);
+    }
+  } catch (error) {
+    console.error("Error getting result history:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   }
 };
+
+// This function is now handled by resultService.processBetsForResult
+// Keeping for backward compatibility but delegating to service
+async function processBetsForRound(
+  roundId,
+  winningDigit,
+  winningTripleDigit = null
+) {
+  try {
+    // If we have the winning triple digit, use it; otherwise try to find it from results
+    let tripleDigit = winningTripleDigit;
+    if (!tripleDigit) {
+      const result = await Result.findOne({ roundId });
+      if (result) {
+        tripleDigit = result.tripleDigitNumber;
+      }
+    }
+
+    // Use the service function for processing
+    if (tripleDigit) {
+      await resultService.processBetsForResult(
+        roundId,
+        tripleDigit,
+        winningDigit
+      );
+    } else {
+      console.warn(
+        `No triple digit found for round ${roundId}, processing single digit only`
+      );
+      // Fallback to old logic for single digit only
+      const bets = await NumberSelection.find({
+        roundId,
+        status: "pending",
+        classType: "D",
+      });
+
+      for (const bet of bets) {
+        let isWinner = false;
+        let winAmount = 0;
+
+        if (parseInt(bet.number) === winningDigit) {
+          isWinner = true;
+          winAmount = bet.amount * 9;
+        }
+
+        bet.status = isWinner ? "win" : "loss";
+        bet.winningAmount = winAmount;
+        bet.resultProcessedAt = new Date();
+        await bet.save();
+
+        if (isWinner && winAmount > 0) {
+          const user = await User.findById(bet.userId);
+          if (user) {
+            const previousBalance = user.walletBalance || user.wallet || 0;
+            user.walletBalance = previousBalance + winAmount;
+            user.wallet = user.walletBalance;
+            await user.save();
+
+            const transaction = new Transaction({
+              userId: bet.userId,
+              type: "bet_won",
+              amount: winAmount,
+              status: "completed",
+              description: `Bet won: ${bet.classType}-${bet.number}, Winning digit: ${winningDigit}`,
+            });
+            await transaction.save();
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error processing bets for round:", error);
+    throw error;
+  }
+}
 
 module.exports = {
   getProfitNumbers,
@@ -459,4 +382,5 @@ module.exports = {
   viewResult,
   getTables,
   getResultHistory,
+  processBetsForRound, // Export for backward compatibility
 };
