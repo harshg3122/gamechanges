@@ -232,8 +232,12 @@ async function getCurrentRound() {
       timeSlot: slot,
       gameClass: "A",
       status: "BETTING_OPEN",
+      gameDate: startOfDay,
+      declared: false,
     });
-    console.log(`🎮 Created new round: ${slot}`);
+    console.log(`🎮 Created new round: ${slot} (ID: ${round._id})`);
+  } else {
+    console.log(`📋 Using existing round: ${slot} (ID: ${round._id})`);
   }
 
   return round;
@@ -465,6 +469,10 @@ exports.getTables = asyncWrapper(async (req, res) => {
       });
     }
 
+    // SIMPLE FIX: Use round ID to generate CONSISTENT numbers
+    const roundSeed = round._id.toString().slice(-8); // Use last 8 chars of round ID as seed
+    const seedNum = parseInt(roundSeed, 16) % 1000; // Convert to number for consistent generation
+
     // Check if tables already exist in database for this round
     let singleDigits = await SingleDigit.find({ roundId: round._id }).sort({
       tokens: -1,
@@ -473,12 +481,20 @@ exports.getTables = asyncWrapper(async (req, res) => {
       tokens: -1,
     });
 
-    // If no data exists, generate new tables
+    // If no data exists, generate new tables ONLY ONCE per round
     if (singleDigits.length === 0 || tripleDigits.length === 0) {
-      // Generate single digit table (10 digits with random tokens)
+      console.log(
+        `🎲 Generating NEW numbers for round ${round._id} - ${round.timeSlot}`
+      );
+
+      // Delete any existing data for this round first
+      await SingleDigit.deleteMany({ roundId: round._id });
+      await TripleDigit.deleteMany({ roundId: round._id });
+
+      // Generate single digit table (10 digits with CONSISTENT tokens based on round ID)
       const singleDigitTable = Array.from({ length: 10 }).map((_, n) => ({
         number: n,
-        tokens: Math.floor(Math.random() * 500) + 400, // 400-900 tokens
+        tokens: 800 - n * 50 + ((seedNum + n * 17) % 100), // CONSISTENT tokens based on round seed
         lock: false,
       }));
 
@@ -490,12 +506,13 @@ exports.getTables = asyncWrapper(async (req, res) => {
         digit.lock = index < 5; // Top 5 highest tokens are locked
       });
 
-      // Generate triple digit table (200 numbers)
+      // Generate triple digit table (200 unique numbers) - CONSISTENT based on round seed
       const tripleDigitTable = [];
       const usedNumbers = new Set();
 
-      while (tripleDigitTable.length < 200) {
-        const num = Math.floor(Math.random() * 1000);
+      // Generate 200 unique numbers using seeded approach
+      for (let i = 0; i < 1000 && tripleDigitTable.length < 200; i++) {
+        const num = (seedNum + i * 37) % 1000; // CONSISTENT generation based on seed
         const numStr = num.toString().padStart(3, "0");
 
         if (!usedNumbers.has(numStr)) {
@@ -504,7 +521,7 @@ exports.getTables = asyncWrapper(async (req, res) => {
           tripleDigitTable.push({
             number: parseInt(numStr, 10),
             classType: "A",
-            tokens: Math.floor(Math.random() * 1000) + 500, // 500-1500 tokens
+            tokens: 500 + ((seedNum + i * 23) % 1000), // CONSISTENT tokens 500-1500 based on seed
             sumDigits: sum,
             onesDigit: sum % 10,
             lock: false,
@@ -520,11 +537,8 @@ exports.getTables = asyncWrapper(async (req, res) => {
         digit.lock = index < 160; // Top 160 highest tokens are locked
       });
 
-      // Store in database for persistence
-      await SingleDigit.deleteMany({ roundId: round._id });
-      await TripleDigit.deleteMany({ roundId: round._id });
-
-      await SingleDigit.insertMany(
+      // Store in database for persistence - IMPORTANT: This ensures same numbers every time
+      const savedSingleDigits = await SingleDigit.insertMany(
         singleDigitTable.map((r) => ({
           roundId: round._id,
           number: r.number,
@@ -533,7 +547,7 @@ exports.getTables = asyncWrapper(async (req, res) => {
         }))
       );
 
-      await TripleDigit.insertMany(
+      const savedTripleDigits = await TripleDigit.insertMany(
         tripleDigitTable.map((r) => ({
           roundId: round._id,
           number: String(r.number).padStart(3, "0"),
@@ -543,6 +557,10 @@ exports.getTables = asyncWrapper(async (req, res) => {
           onesDigit: r.onesDigit,
           lock: r.lock,
         }))
+      );
+
+      console.log(
+        `✅ Saved ${savedSingleDigits.length} single digits and ${savedTripleDigits.length} triple digits to database`
       );
 
       const statistics = {
@@ -557,8 +575,16 @@ exports.getTables = asyncWrapper(async (req, res) => {
       return res.json({
         success: true,
         data: { singleDigitTable, tripleDigitTable, statistics },
+        message: "New numbers generated and saved for round",
       });
     }
+
+    console.log(
+      `📊 Using EXISTING numbers for round ${round._id} - ${round.timeSlot}`
+    );
+    console.log(
+      `Found ${singleDigits.length} single digits and ${tripleDigits.length} triple digits in database`
+    );
 
     // Convert database records to frontend format
     const singleDigitTable = singleDigits.map((s) => ({
