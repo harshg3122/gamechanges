@@ -1,13 +1,61 @@
-// WORKING SERVER - ADMIN LOGIN GUARANTEED
+// WORKING SERVER - ADMIN LOGIN GUARANTEED WITH MONGODB
 const express = require("express");
+const mongoose = require("mongoose");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
 
 const app = express();
 const PORT = 5000;
 const JWT_SECRET = "working-jwt-secret-key-2024";
+const MONGODB_URI = "mongodb://localhost:27017/numbergame";
 
 console.log("🚀 Starting WORKING Server on port", PORT);
+
+// Connect to MongoDB
+mongoose
+  .connect(MONGODB_URI)
+  .then(() => console.log("✅ MongoDB connected successfully"))
+  .catch((err) => console.error("❌ MongoDB connection failed:", err.message));
+
+// MongoDB Models
+const agentSchema = new mongoose.Schema(
+  {
+    fullName: { type: String, required: true },
+    mobile: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    referralCode: { type: String, required: true },
+    users: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    isActive: { type: Boolean, default: true },
+    commissionRate: { type: Number, default: 5 },
+  },
+  { timestamps: true }
+);
+
+const userSchema = new mongoose.Schema(
+  {
+    fullName: { type: String, required: true },
+    mobile: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    agentId: { type: mongoose.Schema.Types.ObjectId, ref: "agents" },
+    balance: { type: Number, default: 0 },
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+const adminSchema = new mongoose.Schema(
+  {
+    username: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+const Agent = mongoose.model("agents", agentSchema);
+const User = mongoose.model("users", userSchema);
+const Admin = mongoose.model("admins", adminSchema);
 
 // CORS and middleware
 app.use(
@@ -91,48 +139,78 @@ app.post("/api/admin-panel/login", (req, res) => {
   });
 });
 
-// AGENT LOGIN - SIMPLE
-app.post("/api/agent/login", (req, res) => {
-  console.log("🤖 Agent login attempt:", req.body);
+// AGENT LOGIN - REAL DATABASE
+app.post("/api/agent/login", async (req, res) => {
+  try {
+    console.log("🤖 Agent login attempt:", req.body);
 
-  const { identifier, password } = req.body;
+    const { identifier, password } = req.body;
 
-  // Simple agent login - Jane Doe example
-  if (
-    (identifier === "2323232323" || identifier === "jane") &&
-    (password === "2323232323" || password === "jane123")
-  ) {
+    if (!identifier || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Mobile number and password are required",
+      });
+    }
+
+    // Find agent by mobile number
+    const agent = await Agent.findOne({ mobile: identifier });
+    if (!agent) {
+      console.log("❌ AGENT NOT FOUND");
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials",
+      });
+    }
+
+    // Check password (try bcrypt first, then plain text)
+    let isValidPassword = false;
+    try {
+      isValidPassword = await bcrypt.compare(password, agent.password);
+    } catch (e) {
+      // If bcrypt fails, try plain text comparison (for mobile numbers as passwords)
+      isValidPassword = password === agent.mobile;
+    }
+
+    if (!isValidPassword) {
+      console.log("❌ AGENT LOGIN FAILED - wrong password");
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials",
+      });
+    }
+
     const token = jwt.sign(
       {
-        id: "jane-123",
+        id: agent._id,
         role: "agent",
-        name: "Jane Doe",
-        mobile: "2323232323",
+        name: agent.fullName,
+        mobile: agent.mobile,
       },
       JWT_SECRET,
       { expiresIn: "8h" }
     );
 
-    console.log("✅ AGENT LOGIN SUCCESS");
+    console.log("✅ AGENT LOGIN SUCCESS:", agent.fullName);
 
     return res.json({
       success: true,
       token: token,
       user: {
-        id: "jane-123",
-        name: "Jane Doe",
-        mobile: "2323232323",
-        email: "jane@example.com",
+        id: agent._id,
+        name: agent.fullName,
+        mobile: agent.mobile,
+        referralCode: agent.referralCode,
         role: "agent",
       },
     });
+  } catch (error) {
+    console.error("Agent login error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error during login",
+    });
   }
-
-  console.log("❌ AGENT LOGIN FAILED");
-  return res.status(401).json({
-    success: false,
-    message: "Invalid credentials",
-  });
 });
 
 // Auth middleware
@@ -167,110 +245,246 @@ function auth(roles = []) {
   };
 }
 
-// ADMIN ROUTES - DUMMY DATA FOR TESTING
-app.get("/api/admin-panel/agents", auth(["admin"]), (req, res) => {
-  console.log("Fetching agents for admin:", req.user.username);
-  res.json({
-    success: true,
-    data: [
-      {
-        _id: "jane-123",
-        name: "Jane Doe",
-        mobile: "2323232323",
-        email: "jane@example.com",
-        commission: 5,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-      },
-    ],
-  });
+// ADMIN ROUTES - REAL MONGODB DATA
+app.get("/api/admin-panel/agents", auth(["admin"]), async (req, res) => {
+  try {
+    console.log("Fetching agents for admin:", req.user.username);
+    const agents = await Agent.find().select("-password");
+    console.log(`Found ${agents.length} agents`);
+
+    res.json({
+      success: true,
+      data: agents,
+    });
+  } catch (error) {
+    console.error("Error fetching agents:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching agents",
+    });
+  }
 });
 
-app.post("/api/admin-panel/agents", auth(["admin"]), (req, res) => {
-  console.log("Creating agent:", req.body);
-  const { name, mobile, email, commission = 5 } = req.body;
+app.post("/api/admin-panel/agents", auth(["admin"]), async (req, res) => {
+  try {
+    console.log("Creating agent:", req.body);
+    const { name, mobile, email, commission = 5 } = req.body;
 
-  res.json({
-    success: true,
-    data: {
-      _id: "new-agent-" + Date.now(),
-      name,
+    if (!name || !mobile) {
+      return res.status(400).json({
+        success: false,
+        message: "Name and mobile are required",
+      });
+    }
+
+    // Check if agent already exists
+    const existingAgent = await Agent.findOne({ mobile });
+    if (existingAgent) {
+      return res.status(400).json({
+        success: false,
+        message: "Agent with this mobile number already exists",
+      });
+    }
+
+    // Hash password (mobile number)
+    const hashedPassword = await bcrypt.hash(mobile, 10);
+
+    // Generate referral code
+    const referralCode = `REF${mobile.slice(-4)}${Date.now()
+      .toString()
+      .slice(-3)}`;
+
+    const agent = new Agent({
+      fullName: name,
       mobile,
-      email,
-      commission,
+      password: hashedPassword,
+      referralCode,
+      commissionRate: commission,
       isActive: true,
-      createdAt: new Date().toISOString(),
-    },
-    credentials: {
-      username: mobile,
-      password: mobile,
-    },
-  });
+    });
+
+    await agent.save();
+
+    res.json({
+      success: true,
+      data: agent.toObject(),
+      credentials: {
+        username: mobile,
+        password: mobile,
+      },
+    });
+  } catch (error) {
+    console.error("Error creating agent:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error creating agent",
+    });
+  }
 });
 
-app.get("/api/admin-panel/users", auth(["admin"]), (req, res) => {
-  console.log("Fetching users for admin");
-  res.json({
-    success: true,
-    data: [],
-  });
+app.get("/api/admin-panel/users", auth(["admin"]), async (req, res) => {
+  try {
+    console.log("Fetching users for admin");
+    const users = await User.find()
+      .select("-password")
+      .populate("agentId", "fullName mobile");
+    console.log(`Found ${users.length} users`);
+
+    res.json({
+      success: true,
+      data: users,
+    });
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching users",
+    });
+  }
 });
 
-app.post("/api/admin-panel/users", auth(["admin"]), (req, res) => {
-  console.log("Creating user:", req.body);
-  const { username, mobileNumber, password, agentId } = req.body;
+app.post("/api/admin-panel/users", auth(["admin"]), async (req, res) => {
+  try {
+    console.log("Creating user:", req.body);
+    const { username, mobileNumber, password, agentId } = req.body;
 
-  res.json({
-    success: true,
-    data: {
-      _id: "new-user-" + Date.now(),
-      username: username.toLowerCase(),
-      mobileNumber,
+    if (!username || !mobileNumber || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Username, mobile number, and password are required",
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ mobile: mobileNumber });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "User with this mobile number already exists",
+      });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = new User({
+      fullName: username,
+      mobile: mobileNumber,
+      password: hashedPassword,
       agentId: agentId || null,
       balance: 0,
       isActive: true,
-      createdAt: new Date().toISOString(),
-    },
-  });
+    });
+
+    await user.save();
+
+    // Populate agent info for response
+    await user.populate("agentId", "fullName mobile");
+
+    res.json({
+      success: true,
+      data: user.toObject(),
+    });
+  } catch (error) {
+    console.error("Error creating user:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error creating user",
+    });
+  }
 });
 
 // AGENT ROUTES
-app.get("/api/agent/dashboard", auth(["agent"]), (req, res) => {
-  console.log("Agent dashboard for:", req.user.name);
-  res.json({
-    success: true,
-    data: {
-      agent: req.user,
-      userCount: 0,
-      referralCode: req.user.mobile,
-    },
-  });
+app.get("/api/agent/dashboard", auth(["agent"]), async (req, res) => {
+  try {
+    console.log("Agent dashboard for:", req.user.name);
+
+    // Get user count for this agent
+    const userCount = await User.countDocuments({ agentId: req.user.id });
+
+    res.json({
+      success: true,
+      data: {
+        agent: req.user,
+        userCount,
+        referralCode: req.user.mobile,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching agent dashboard:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching dashboard data",
+    });
+  }
 });
 
-app.get("/api/agent/users", auth(["agent"]), (req, res) => {
-  console.log("Fetching users for agent:", req.user.name);
-  res.json({
-    success: true,
-    data: [],
-  });
+app.get("/api/agent/users", auth(["agent"]), async (req, res) => {
+  try {
+    console.log("Fetching users for agent:", req.user.name);
+
+    // Get all users for this agent
+    const users = await User.find({ agentId: req.user.id }).select("-password");
+
+    res.json({
+      success: true,
+      data: users,
+    });
+  } catch (error) {
+    console.error("Error fetching agent users:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching users",
+    });
+  }
 });
 
-app.post("/api/agent/add-user", auth(["agent"]), (req, res) => {
-  console.log("Agent adding user:", req.body);
-  const { username, mobileNumber, password } = req.body;
+app.post("/api/agent/add-user", auth(["agent"]), async (req, res) => {
+  try {
+    console.log("Agent adding user:", req.body);
+    const { username, mobileNumber, password } = req.body;
 
-  res.json({
-    success: true,
-    data: {
-      _id: "new-user-" + Date.now(),
-      username: username.toLowerCase(),
-      mobileNumber,
-      agentId: req.userId,
+    if (!username || !mobileNumber || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required",
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ mobile: mobileNumber });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "User with this mobile number already exists",
+      });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = new User({
+      fullName: username,
+      mobile: mobileNumber,
+      password: hashedPassword,
+      agentId: req.user.id,
       balance: 0,
       isActive: true,
-      createdAt: new Date().toISOString(),
-    },
-  });
+    });
+
+    await user.save();
+
+    res.json({
+      success: true,
+      data: user.toObject(),
+    });
+  } catch (error) {
+    console.error("Error creating user:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error creating user",
+    });
+  }
 });
 
 app.get("/api/agent/results", auth(["agent"]), (req, res) => {
