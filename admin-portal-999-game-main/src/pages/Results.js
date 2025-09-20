@@ -654,65 +654,16 @@ const Results = ({ roundId }) => {
       // Check timing constraints (unless it's system auto-declaration)
       if (!isSystemAutoDeclaration) {
         if (isInFirstFiftyMinutes()) {
-          setError(
-            "Result declaration not allowed in the first 50 minutes. Please wait for the last 10 minutes."
-          );
+          const errorMsg =
+            "Result declaration not allowed in the first 50 minutes. Please wait for the last 10 minutes.";
+          setError(errorMsg);
+          showAlert(setAlert, "warning", errorMsg);
           setDeclareLoading(false);
           return;
         }
       }
 
-      // Check if the selected triple digit is locked
-      const selectedTripleDigit = resultTables?.tripleDigitTable?.find(
-        (item) => item.number === tripleDigitNumber
-      );
-
-      if (selectedTripleDigit?.lock) {
-        setError(
-          `Cannot declare result: Triple digit ${tripleDigitNumber} is locked. Please choose another number.`
-        );
-        setDeclareLoading(false);
-        return;
-      }
-
-      // First check if the triple digit is valid for result declaration
-      const resultCalc = calculateResultFromTripleDigit(tripleDigitNumber);
-
-      // If the resulting single digit is locked, show error
-      if (resultCalc.isLocked) {
-        setError(
-          `Cannot declare result: The sum ${resultCalc.sum} results in digit ${resultCalc.lastDigit} which is locked. Please choose another number.`
-        );
-        setDeclareLoading(false);
-        return;
-      }
-
-      // For demo purposes, create a mock result since backend is not connected
-      const mockResult = {
-        tripleDigitNumber: tripleDigitNumber.toString(),
-        singleDigitResult: resultCalc.lastDigit.toString(),
-        declaredAt: new Date().toISOString(),
-        roundId: currentRound?._id || "mock-round-id",
-      };
-
-      setResult(mockResult);
-
-      // Set mock profit numbers for demo
-      setProfitNumbers([
-        { number: resultCalc.lastDigit, tokens: 1500, locked: false },
-        { number: (resultCalc.lastDigit + 1) % 10, tokens: 1200, locked: true },
-        { number: (resultCalc.lastDigit + 2) % 10, tokens: 800, locked: false },
-      ]);
-
-      showAlert(
-        setAlert,
-        "success",
-        `Result declared: Triple digit ${tripleDigitNumber} (Sum: ${resultCalc.sum}, Single digit: ${resultCalc.lastDigit})`
-      );
-
-      setShowProfitModal(true); // Show the result popup after declaring
-
-      // Try backend call but don't fail if it doesn't work
+      // Try backend call first to get proper validation
       try {
         const res = await axios.post(`${API_BASE}/results/declare`, {
           roundId: currentRound?._id,
@@ -721,12 +672,107 @@ const Results = ({ roundId }) => {
 
         if (res.data.success) {
           setResult(res.data.result);
+
+          // Calculate result for display
+          const resultCalc = calculateResultFromTripleDigit(tripleDigitNumber);
+
+          showAlert(
+            setAlert,
+            "success",
+            res.data.message ||
+              `Result declared successfully: Triple digit ${tripleDigitNumber} (Sum: ${resultCalc.sum}, Single digit: ${resultCalc.lastDigit})`
+          );
+
+          setShowProfitModal(true); // Show the result popup after declaring
+
+          // Refresh the data to show updated status
+          await fetchData();
         }
       } catch (backendError) {
-        console.log("Backend not available, using mock result");
+        // Handle backend errors with proper popup messages
+        const errorData = backendError.response?.data;
+        let errorMessage = "Error declaring result";
+
+        if (errorData) {
+          if (errorData.error === "Selected number is locked") {
+            errorMessage =
+              errorData.message ||
+              `This number is locked and cannot be selected. Please choose another number.`;
+          } else if (errorData.error === "Resulting single digit is locked") {
+            errorMessage =
+              errorData.message ||
+              `This number results in a locked single digit. Please choose another number.`;
+          } else if (
+            errorData.error === "Result already declared for this round"
+          ) {
+            errorMessage = "A result has already been declared for this round.";
+          } else {
+            errorMessage =
+              errorData.message || errorData.error || "Error declaring result";
+          }
+        }
+
+        setError(errorMessage);
+        showAlert(setAlert, "danger", errorMessage);
+
+        console.error(
+          "Backend error:",
+          backendError.response?.data || backendError.message
+        );
+
+        // Fallback to client-side validation if backend is not available
+        if (backendError.code === "NETWORK_ERROR" || !backendError.response) {
+          console.log("Backend not available, using client-side validation");
+
+          // Check if the selected triple digit is locked
+          const selectedTripleDigit = resultTables?.tripleDigitTable?.find(
+            (item) => item.number === tripleDigitNumber
+          );
+
+          if (selectedTripleDigit?.lock) {
+            const lockError = `Cannot declare result: Triple digit ${tripleDigitNumber} is locked. Please choose another number.`;
+            setError(lockError);
+            showAlert(setAlert, "danger", lockError);
+            setDeclareLoading(false);
+            return;
+          }
+
+          // First check if the triple digit is valid for result declaration
+          const resultCalc = calculateResultFromTripleDigit(tripleDigitNumber);
+
+          // If the resulting single digit is locked, show error
+          if (resultCalc.isLocked) {
+            const digitError = `Cannot declare result: The sum ${resultCalc.sum} results in digit ${resultCalc.lastDigit} which is locked. Please choose another number.`;
+            setError(digitError);
+            showAlert(setAlert, "danger", digitError);
+            setDeclareLoading(false);
+            return;
+          }
+
+          // For demo purposes, create a mock result since backend is not connected
+          const mockResult = {
+            tripleDigitNumber: tripleDigitNumber.toString(),
+            singleDigitResult: resultCalc.lastDigit.toString(),
+            declaredAt: new Date().toISOString(),
+            roundId: currentRound?._id || "mock-round-id",
+          };
+
+          setResult(mockResult);
+
+          showAlert(
+            setAlert,
+            "info",
+            `Mock result declared: Triple digit ${tripleDigitNumber} (Sum: ${resultCalc.sum}, Single digit: ${resultCalc.lastDigit}) - Backend not available`
+          );
+
+          setShowProfitModal(true);
+        }
       }
     } catch (err) {
-      setError("Error declaring result");
+      const genericError = "Unexpected error occurred while declaring result";
+      setError(genericError);
+      showAlert(setAlert, "danger", genericError);
+      console.error("Unexpected error:", err);
     }
     setDeclareLoading(false);
   };

@@ -48,12 +48,14 @@ function randomTripleAllowed() {
 
 // Declare result endpoint
 exports.declareResult = asyncWrapper(async (req, res) => {
-  const { winning, roundId } = req.body;
+  const { winning, roundId, tripleDigitNumber } = req.body;
+  const selectedNumber = winning || tripleDigitNumber;
 
-  if (!winning) {
+  if (!selectedNumber) {
     return res.status(400).json({
       success: false,
       error: "Winning number required",
+      message: "Please select a number to declare as result",
     });
   }
 
@@ -65,6 +67,7 @@ exports.declareResult = asyncWrapper(async (req, res) => {
       return res.status(404).json({
         success: false,
         error: "Round not found",
+        message: "The specified round could not be found",
       });
     }
   } else {
@@ -78,33 +81,52 @@ exports.declareResult = asyncWrapper(async (req, res) => {
     return res.status(400).json({
       success: false,
       error: "Result already declared for this round",
+      message: "A result has already been declared for this round",
     });
   }
 
-  // Validate winning number
-  const digits = tripleToDigits(winning);
-  const locked = getLockedDigits();
+  // Check if the selected triple digit is locked in the database
+  const selectedTripleDigit = await TripleDigit.findOne({
+    roundId: round._id,
+    number: String(selectedNumber).padStart(3, "0"),
+  });
 
-  // Check for locked digits
-  const lockedDigitsFound = digits.filter((d) => locked.has(d));
-  if (lockedDigitsFound.length > 0) {
+  if (selectedTripleDigit && selectedTripleDigit.lock) {
     return res.status(400).json({
       success: false,
-      error: `One or more digits are locked (${lockedDigitsFound.join(
-        ", "
-      )}). Choose another number.`,
+      error: "Selected number is locked",
+      message:
+        "This number is locked and cannot be selected. Please choose another number.",
+      lockedNumber: String(selectedNumber).padStart(3, "0"),
     });
   }
 
   // Calculate single digit result
+  const digits = tripleToDigits(selectedNumber);
   const sum = digits.reduce((a, b) => a + b, 0);
   const singleDigitResult = sum % 10;
+
+  // Check if the resulting single digit is locked
+  const resultingSingleDigit = await SingleDigit.findOne({
+    roundId: round._id,
+    number: singleDigitResult,
+  });
+
+  if (resultingSingleDigit && resultingSingleDigit.lock) {
+    return res.status(400).json({
+      success: false,
+      error: "Resulting single digit is locked",
+      message: `This number results in single digit ${singleDigitResult} which is locked. Please choose another number.`,
+      lockedSingleDigit: singleDigitResult,
+      selectedTriple: String(selectedNumber).padStart(3, "0"),
+    });
+  }
 
   // Create result object
   const resultData = {
     roundId: round._id,
     timeSlot: round.timeSlot,
-    tripleDigitNumber: String(winning).padStart(3, "0"),
+    tripleDigitNumber: String(selectedNumber).padStart(3, "0"),
     singleDigitResult: String(singleDigitResult),
     declaredBy: req.userId || null,
     declaredAt: new Date(),
@@ -136,6 +158,7 @@ exports.declareResult = asyncWrapper(async (req, res) => {
         timeSlot: round.timeSlot,
         status: "CLOSED",
       },
+      message: "Result declared successfully",
     });
   } catch (dbErr) {
     console.error("Database save failed, enqueueing result:", dbErr);
@@ -216,12 +239,44 @@ async function getCurrentRound() {
   return round;
 }
 
-// Get current round endpoint
+// Get current round endpoint with live data
 exports.getCurrentRound = asyncWrapper(async (req, res) => {
   const round = await getCurrentRound();
+
+  // Get the latest result for this round if any
+  const result = await Result.findOne({ roundId: round._id }).sort({
+    createdAt: -1,
+  });
+
+  // Calculate time remaining in the round
+  const now = new Date();
+  const [startTime, endTime] = round.timeSlot.split(" - ");
+  const endHour = parseInt(endTime.split(":")[0]);
+  const endAmPm = endTime.includes("PM") ? "PM" : "AM";
+  let actualEndHour = endHour;
+  if (endAmPm === "PM" && endHour !== 12) actualEndHour += 12;
+  if (endAmPm === "AM" && endHour === 12) actualEndHour = 0;
+
+  const roundEndTime = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    actualEndHour,
+    0,
+    0
+  );
+  const timeToEnd = Math.max(0, (roundEndTime - now) / (1000 * 60)); // minutes
+
   return res.json({
     success: true,
-    data: round,
+    data: {
+      ...round.toObject(),
+      result: result ? result.toObject() : null,
+      timeRemaining: Math.floor(timeToEnd),
+      status: result ? "CLOSED" : timeToEnd > 0 ? "ACTIVE" : "ENDED",
+      winningNumber: result ? result.tripleDigitNumber : null,
+      winningSingleDigit: result ? result.singleDigitResult : null,
+    },
   });
 });
 
@@ -390,5 +445,203 @@ exports.processQueue = async () => {
     }
   }
 };
+
+// Get tables with proper sorting and locking
+exports.getTables = asyncWrapper(async (req, res) => {
+  try {
+    const { roundId } = req.query;
+    let round;
+
+    if (roundId) {
+      round = await Round.findById(roundId);
+    } else {
+      round = await getCurrentRound();
+    }
+
+    if (!round) {
+      return res.json({
+        success: true,
+        data: { singleDigitTable: [], tripleDigitTable: [], statistics: {} },
+      });
+    }
+
+    // Check if tables already exist in database for this round
+    let singleDigits = await SingleDigit.find({ roundId: round._id }).sort({
+      tokens: -1,
+    });
+    let tripleDigits = await TripleDigit.find({ roundId: round._id }).sort({
+      tokens: -1,
+    });
+
+    // If no data exists, generate new tables
+    if (singleDigits.length === 0 || tripleDigits.length === 0) {
+      // Generate single digit table (10 digits with random tokens)
+      const singleDigitTable = Array.from({ length: 10 }).map((_, n) => ({
+        number: n,
+        tokens: Math.floor(Math.random() * 500) + 400, // 400-900 tokens
+        lock: false,
+      }));
+
+      // Sort single digits in DESCENDING order by tokens (highest first)
+      singleDigitTable.sort((a, b) => b.tokens - a.tokens);
+
+      // Lock top 50% (5 out of 10) digits in descending order
+      singleDigitTable.forEach((digit, index) => {
+        digit.lock = index < 5; // Top 5 highest tokens are locked
+      });
+
+      // Generate triple digit table (200 numbers)
+      const tripleDigitTable = [];
+      const usedNumbers = new Set();
+
+      while (tripleDigitTable.length < 200) {
+        const num = Math.floor(Math.random() * 1000);
+        const numStr = num.toString().padStart(3, "0");
+
+        if (!usedNumbers.has(numStr)) {
+          usedNumbers.add(numStr);
+          const sum = numStr.split("").reduce((a, d) => a + parseInt(d, 10), 0);
+          tripleDigitTable.push({
+            number: parseInt(numStr, 10),
+            classType: "A",
+            tokens: Math.floor(Math.random() * 1000) + 500, // 500-1500 tokens
+            sumDigits: sum,
+            onesDigit: sum % 10,
+            lock: false,
+          });
+        }
+      }
+
+      // Sort triple digits in DESCENDING order by tokens (highest first)
+      tripleDigitTable.sort((a, b) => b.tokens - a.tokens);
+
+      // Lock top 80% (160 out of 200) in descending order
+      tripleDigitTable.forEach((digit, index) => {
+        digit.lock = index < 160; // Top 160 highest tokens are locked
+      });
+
+      // Store in database for persistence
+      await SingleDigit.deleteMany({ roundId: round._id });
+      await TripleDigit.deleteMany({ roundId: round._id });
+
+      await SingleDigit.insertMany(
+        singleDigitTable.map((r) => ({
+          roundId: round._id,
+          number: r.number,
+          tokens: r.tokens,
+          lock: r.lock,
+        }))
+      );
+
+      await TripleDigit.insertMany(
+        tripleDigitTable.map((r) => ({
+          roundId: round._id,
+          number: String(r.number).padStart(3, "0"),
+          classType: r.classType,
+          tokens: r.tokens,
+          sumDigits: r.sumDigits,
+          onesDigit: r.onesDigit,
+          lock: r.lock,
+        }))
+      );
+
+      const statistics = {
+        totalBets: 0,
+        totalBetAmount: 0,
+        lockedSingleDigitEntries: singleDigitTable.filter((s) => s.lock).length,
+        totalSingleDigitEntries: singleDigitTable.length,
+        lockedTripleDigitEntries: tripleDigitTable.filter((t) => t.lock).length,
+        totalTripleDigitEntries: tripleDigitTable.length,
+      };
+
+      return res.json({
+        success: true,
+        data: { singleDigitTable, tripleDigitTable, statistics },
+      });
+    }
+
+    // Convert database records to frontend format
+    const singleDigitTable = singleDigits.map((s) => ({
+      number: s.number,
+      tokens: s.tokens,
+      lock: s.lock,
+    }));
+
+    const tripleDigitTable = tripleDigits.map((t) => ({
+      number: parseInt(t.number),
+      classType: t.classType,
+      tokens: t.tokens,
+      sumDigits: t.sumDigits,
+      onesDigit: t.onesDigit,
+      lock: t.lock,
+    }));
+
+    const statistics = {
+      totalBets: 0,
+      totalBetAmount: 0,
+      lockedSingleDigitEntries: singleDigitTable.filter((s) => s.lock).length,
+      totalSingleDigitEntries: singleDigitTable.length,
+      lockedTripleDigitEntries: tripleDigitTable.filter((t) => t.lock).length,
+      totalTripleDigitEntries: tripleDigitTable.length,
+    };
+
+    res.json({
+      success: true,
+      data: { singleDigitTable, tripleDigitTable, statistics },
+    });
+  } catch (error) {
+    console.error("Error getting tables:", error);
+    res.json({
+      success: true,
+      data: { singleDigitTable: [], tripleDigitTable: [], statistics: {} },
+    });
+  }
+});
+
+// Get profit numbers for analysis
+exports.getProfitNumbers = asyncWrapper(async (req, res) => {
+  try {
+    const { roundId } = req.query;
+    let round;
+
+    if (roundId) {
+      round = await Round.findById(roundId);
+    } else {
+      round = await getCurrentRound();
+    }
+
+    if (!round) {
+      return res.json({
+        success: false,
+        message: "Round not found",
+      });
+    }
+
+    // Get unlocked triple digits that could be profitable
+    const unlockedTriples = await TripleDigit.find({
+      roundId: round._id,
+      lock: false,
+    }).sort({ tokens: 1 }); // Sort by lowest tokens first (most profitable)
+
+    const profitNumbers = unlockedTriples.slice(0, 10).map((t) => ({
+      tripleDigit: t.number,
+      tokens: t.tokens,
+      sumDigits: t.sumDigits,
+      singleDigitResult: t.onesDigit,
+      profitability: "High", // Simple classification
+    }));
+
+    res.json({
+      success: true,
+      data: profitNumbers,
+    });
+  } catch (error) {
+    console.error("Error getting profit numbers:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get profit numbers",
+    });
+  }
+});
 
 module.exports = exports;

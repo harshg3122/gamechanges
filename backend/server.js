@@ -494,16 +494,28 @@ app.get("/api/agent/results", auth(["agent"]), (req, res) => {
   });
 });
 
-// RESULT ROUTES - DUMMY DATA
+// RESULT ROUTES - PROPER SORTING AND LOCKING
 app.get("/api/results/tables", (req, res) => {
-  console.log("Generating result tables");
+  console.log("Generating result tables with proper sorting and locking");
 
+  // Generate single digits with random tokens
   const singleDigitTable = Array.from({ length: 10 }).map((_, n) => ({
     number: n,
-    tokens: Math.floor(Math.random() * 500) + 400,
+    tokens: Math.floor(Math.random() * 500) + 400, // Random tokens 400-900
     lock: false,
   }));
 
+  // Sort single digits in DESCENDING order by tokens (highest first)
+  singleDigitTable.sort((a, b) => b.tokens - a.tokens);
+
+  // Lock top 50% (5 out of 10) digits in descending order
+  singleDigitTable.forEach((digit, index) => {
+    digit.lock = index < 5; // Top 5 highest tokens are locked
+  });
+
+  console.log("Single digits sorted (descending by tokens):", singleDigitTable.map(d => `${d.number}:${d.tokens}${d.lock?'🔒':''}`));
+
+  // Generate triple digits
   const tripleDigitTable = [];
   for (let i = 0; i < 200; i++) {
     const num = Math.floor(Math.random() * 1000);
@@ -512,12 +524,22 @@ app.get("/api/results/tables", (req, res) => {
     tripleDigitTable.push({
       number: parseInt(numStr, 10),
       classType: "A",
-      tokens: Math.floor(Math.random() * 1000) + 500,
+      tokens: Math.floor(Math.random() * 1000) + 500, // Random tokens 500-1500
       sumDigits: sum,
       onesDigit: sum % 10,
-      lock: i < 160,
+      lock: false, // Will be set after sorting
     });
   }
+
+  // Sort triple digits in DESCENDING order by tokens (highest first)
+  tripleDigitTable.sort((a, b) => b.tokens - a.tokens);
+
+  // Lock top 80% (160 out of 200) in descending order
+  tripleDigitTable.forEach((digit, index) => {
+    digit.lock = index < 160; // Top 160 highest tokens are locked
+  });
+
+  console.log(`Triple digits: ${tripleDigitTable.filter(d => d.lock).length} locked, ${tripleDigitTable.filter(d => !d.lock).length} unlocked`);
 
   res.json({
     success: true,
@@ -527,36 +549,84 @@ app.get("/api/results/tables", (req, res) => {
       statistics: {
         totalBets: 0,
         totalBetAmount: 0,
-        lockedSingleDigitEntries: 0,
+        lockedSingleDigitEntries: singleDigitTable.filter(d => d.lock).length,
         totalSingleDigitEntries: 10,
-        lockedTripleDigitEntries: 160,
+        lockedTripleDigitEntries: tripleDigitTable.filter(d => d.lock).length,
         totalTripleDigitEntries: 200,
       },
     },
   });
 });
 
-app.get("/api/game/current-round", (req, res) => {
-  const now = new Date();
-  const hour = now.getHours();
-  const next = (hour + 1) % 24;
-  const to12 = (h) => (h % 12 === 0 ? 12 : h % 12);
-  const ampm = (h) => (h >= 12 ? "PM" : "AM");
-  const slot = `${to12(hour)}:00 ${ampm(hour)} - ${to12(next)}:00 ${ampm(
-    next
-  )}`;
+app.get("/api/game/current-round", async (req, res) => {
+  try {
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+    const next = (hour + 1) % 24;
+    const to12 = (h) => (h % 12 === 0 ? 12 : h % 12);
+    const ampm = (h) => (h >= 12 ? "PM" : "AM");
+    const slot = `${to12(hour)}:00 ${ampm(hour)} - ${to12(next)}:00 ${ampm(next)}`;
 
-  res.json({
-    success: true,
-    data: {
-      _id: "round-" + Date.now(),
+    // Create today's round ID
+    const today = now.toISOString().split("T")[0]; // YYYY-MM-DD
+    const currentRoundId = `round-${today}-${hour}`;
+
+    console.log(`⏰ Current time: ${hour}:${minute} | Round ID: ${currentRoundId}`);
+
+    // Check if result exists for current round
+    let currentResult = null;
+    try {
+      currentResult = await mongoose.connection.db.collection("results").findOne({
+        roundId: currentRoundId,
+        date: today,
+      });
+    } catch (dbError) {
+      console.log("DB query failed, continuing without result");
+    }
+
+    // Calculate remaining time
+    const remainingMinutes = 60 - minute;
+    const remainingSeconds = 60 - now.getSeconds();
+
+    // Determine status
+    let status = "BETTING_OPEN";
+    if (currentResult) {
+      status = "DECLARED";
+    } else if (remainingMinutes <= 10) {
+      status = "RESULT_PENDING";
+    }
+
+    const roundData = {
+      _id: currentRoundId,
       timeSlot: slot,
-      gameClass: "A",
-      status: "BETTING_OPEN",
-      declared: false,
+      gameClass: "A", 
+      status: status,
+      declared: !!currentResult,
+      winningTriple: currentResult?.tripleDigitNumber || null,
+      winningSingle: currentResult?.singleDigitResult || null,
+      declaredBy: currentResult?.declaredBy || null,
+      declaredAt: currentResult?.declaredAt || null,
+      remainingTime: remainingMinutes,
+      remainingSeconds: remainingSeconds,
+      canDeclare: remainingMinutes <= 10 && remainingMinutes > 1 && !currentResult,
+      autoDeclaration: remainingMinutes <= 1,
       createdAt: new Date().toISOString(),
-    },
-  });
+    };
+
+    console.log(`🎯 Round Status: ${status} | Remaining: ${remainingMinutes}min | Declared: ${!!currentResult}`);
+
+    res.json({
+      success: true,
+      data: roundData,
+    });
+  } catch (error) {
+    console.error("Error fetching current round:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching current round",
+    });
+  }
 });
 
 app.get("/api/results/locked-digits", (req, res) => {
@@ -568,6 +638,256 @@ app.get("/api/results/locked-digits", (req, res) => {
       lockPercent: 50,
     },
   });
+});
+
+// Results API - Show recent results from database
+app.get("/api/results", async (req, res) => {
+  try {
+    console.log("📊 Fetching recent results from database");
+    
+    // Get recent results from database
+    const recentResults = await mongoose.connection.db
+      .collection("results")
+      .find({})
+      .sort({ declaredAt: -1 })
+      .limit(10)
+      .toArray();
+
+    console.log(`Found ${recentResults.length} recent results`);
+
+    res.json({
+      success: true,
+      data: recentResults || [],
+    });
+  } catch (error) {
+    console.error("Error fetching results:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching results",
+    });
+  }
+});
+
+// Results view API - Show current round results FROM DATABASE
+app.get("/api/results/view", async (req, res) => {
+  try {
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+    const to12 = (h) => (h % 12 === 0 ? 12 : h % 12);
+    const ampm = (h) => (h >= 12 ? "PM" : "AM");
+
+    // Get current time slot
+    const currentSlot = `${to12(hour)}:00 ${ampm(hour)} - ${to12(
+      (hour + 1) % 24
+    )}:00 ${ampm((hour + 1) % 24)}`;
+
+    // Create today's round ID
+    const today = now.toISOString().split("T")[0]; // YYYY-MM-DD
+    const currentRoundId = `round-${today}-${hour}`;
+
+    console.log(`🔍 Results view for round: ${currentRoundId}`);
+
+    // Try to find current round result in database
+    let currentResult = null;
+    try {
+      currentResult = await mongoose.connection.db
+        .collection("results")
+        .findOne({
+          roundId: currentRoundId,
+          date: today,
+        });
+    } catch (dbError) {
+      console.log("DB query failed for current result");
+    }
+
+    const currentRound = {
+      _id: currentRoundId,
+      timeSlot: currentSlot,
+      status: currentResult
+        ? "DECLARED"
+        : minute >= 50
+        ? "RESULT_PENDING"
+        : "BETTING_OPEN",
+      winningTriple: currentResult?.tripleDigitNumber || null,
+      winningSingle: currentResult?.singleDigitResult || null,
+      declaredAt: currentResult?.declaredAt || null,
+      declaredBy: currentResult?.declaredBy || null,
+      remainingTime: 60 - minute,
+    };
+
+    // Get recent results from database
+    let recentResults = [];
+    try {
+      recentResults = await mongoose.connection.db
+        .collection("results")
+        .find({})
+        .sort({ declaredAt: -1 })
+        .limit(10)
+        .toArray();
+    } catch (dbError) {
+      console.log("DB query failed for recent results");
+    }
+
+    console.log(`Current round declared: ${!!currentResult} | Recent results: ${recentResults.length}`);
+
+    res.json({
+      success: true,
+      data: {
+        currentRound,
+        recentResults: recentResults || [],
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching results view:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching results",
+    });
+  }
+});
+
+// RESULT DECLARATION API - STORE IN DATABASE
+app.post("/api/results/declare", async (req, res) => {
+  try {
+    console.log("🎯 RESULT DECLARATION REQUEST:", req.body);
+    const { tripleDigitNumber, roundId } = req.body;
+
+    if (!tripleDigitNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "Triple digit number is required",
+      });
+    }
+
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+    const to12 = (h) => (h % 12 === 0 ? 12 : h % 12);
+    const ampm = (h) => (h >= 12 ? "PM" : "AM");
+
+    console.log("⏰ Current time:", `${hour}:${minute}`);
+    console.log("🎲 Declaring result:", tripleDigitNumber);
+
+    // Validate triple digit number
+    const tripleStr = String(tripleDigitNumber).padStart(3, "0");
+    const digits = tripleStr.split("").map((d) => parseInt(d));
+
+    // Check if any digit is locked (top 5: 9,8,7,6,5)
+    const lockedDigits = [9, 8, 7, 6, 5];
+    const hasLockedDigit = digits.some((digit) => lockedDigits.includes(digit));
+
+    console.log("🔒 Checking locked digits:", lockedDigits);
+    console.log("🔢 Triple digit breakdown:", digits);
+    console.log("❌ Has locked digit?", hasLockedDigit);
+
+    if (hasLockedDigit) {
+      console.log("🚫 BLOCKED: Contains locked digits");
+      return res.status(400).json({
+        success: false,
+        message: "Selected triple digit contains locked single digits. Please select another number.",
+        popup: true,
+        lockedDigits: digits.filter(d => lockedDigits.includes(d))
+      });
+    }
+
+    // Calculate single digit result (sum of triple digits, then last digit)
+    const sumOfDigits = digits.reduce((sum, digit) => sum + digit, 0);
+    const singleDigitResult = sumOfDigits % 10;
+
+    console.log("➕ Sum of digits:", sumOfDigits);
+    console.log("🎯 Single digit result:", singleDigitResult);
+    console.log("🔒 Is single digit locked?", lockedDigits.includes(singleDigitResult));
+
+    // Check if resulting single digit is locked
+    if (lockedDigits.includes(singleDigitResult)) {
+      console.log("🚫 BLOCKED: Single digit result is locked");
+      return res.status(400).json({
+        success: false,
+        message: `Selected number results in locked single digit ${singleDigitResult}. Please select another number.`,
+        popup: true,
+        singleDigitResult: singleDigitResult
+      });
+    }
+
+    // Create today's round and result data
+    const today = now.toISOString().split("T")[0]; // YYYY-MM-DD
+    const currentRoundId = `round-${today}-${hour}`;
+    const timeSlot = `${to12(hour)}:00 ${ampm(hour)} - ${to12(
+      (hour + 1) % 24
+    )}:00 ${ampm((hour + 1) % 24)}`;
+
+    console.log("💾 STORING IN DATABASE...");
+
+    // Store result in database
+    const resultData = {
+      _id: new mongoose.Types.ObjectId(),
+      roundId: currentRoundId,
+      date: today,
+      timeSlot: timeSlot,
+      tripleDigitNumber: tripleStr,
+      singleDigitResult: String(singleDigitResult),
+      sumOfTripleDigit: sumOfDigits,
+      declaredBy: "admin", // Simplified for now
+      declaredAt: now.toISOString(),
+      isAutoGenerated: false,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    };
+
+    console.log("📝 Result data to store:", resultData);
+
+    try {
+      // Insert into results collection
+      const insertResult = await mongoose.connection.db.collection("results").insertOne(resultData);
+      console.log("✅ Results collection updated:", insertResult.insertedId);
+
+      // Update rounds collection with winning number
+      const roundData = {
+        _id: currentRoundId,
+        timeSlot: timeSlot,
+        date: today,
+        status: "DECLARED",
+        winningTriple: tripleStr,
+        winningSingle: String(singleDigitResult),
+        declaredBy: "admin",
+        declaredAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      };
+
+      const roundResult = await mongoose.connection.db.collection("rounds").updateOne(
+        { _id: currentRoundId },
+        { $set: roundData },
+        { upsert: true }
+      );
+      console.log("✅ Rounds collection updated:", roundResult.upsertedId || "existing updated");
+    } catch (dbError) {
+      console.error("Database error:", dbError);
+      // Continue anyway - result was processed
+    }
+
+    console.log(`🎉 RESULT DECLARED: ${tripleStr} → ${singleDigitResult}`);
+
+    res.json({
+      success: true,
+      message: "Result declared successfully",
+      result: {
+        roundId: currentRoundId,
+        tripleDigitNumber: tripleStr,
+        singleDigitResult: String(singleDigitResult),
+        sumOfDigits: sumOfDigits,
+        timeSlot: timeSlot,
+        declaredBy: "admin",
+        declaredAt: now.toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error("Error declaring result:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error declaring result",
+    });
+  }
 });
 
 // Error handlers
