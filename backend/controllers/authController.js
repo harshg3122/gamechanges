@@ -1,364 +1,233 @@
-const User = require('../models/User');
-const Admin = require('../models/Admin');
-const { generateToken } = require('../utils/jwt');
-const { isValidMobile, isValidUsername } = require('../utils/numberUtils');
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
+const User = require("../models/User");
+const Agent = require("../models/Agent");
+const Admin = require("../models/Admin");
 
-/**
- * User Registration
- */
-const registerUser = async (req, res) => {
+const { JWT_SECRET, JWT_EXPIRES_IN = "8h", BCRYPT_ROUNDS = 10 } = process.env;
+
+if (!JWT_SECRET) {
+  console.warn("⚠️  JWT_SECRET not set in environment variables!");
+}
+
+function signToken(payload) {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+}
+
+// Admin login
+exports.adminLogin = async (req, res) => {
   try {
-    const { username, mobileNumber, email, password, referral } = req.body;
-
-    // Check if user already exists (username and mobile are required, email is optional)
-    const queryConditions = [
-      { username: username },
-      { mobileNumber: mobileNumber }  // Mobile is compulsory, so always check
-    ];
-    // Only check email if provided
-    if (email && email.trim() !== '') {
-      queryConditions.push({ email: email });
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Username and password required",
+      });
     }
-    const existingUser = await User.findOne({
-      $or: queryConditions
+
+    // Find admin by username
+    const admin = await Admin.findOne({ username: username.toLowerCase() });
+    if (!admin) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials",
+      });
+    }
+
+    // Compare password
+    const isValidPassword = await bcrypt.compare(password, admin.password);
+    if (!isValidPassword) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials",
+      });
+    }
+
+    // Generate token
+    const token = signToken({
+      id: admin._id,
+      role: "admin",
+      username: admin.username,
     });
 
-    if (existingUser) {
-      let message = '';
-      if (existingUser.username === username) message = 'Username already exists';
-      else if (existingUser.mobileNumber === mobileNumber) message = 'Mobile number already registered';
-      else if (email && email.trim() !== '' && existingUser.email === email) message = 'Email already registered';
-      else message = 'User already exists';
-      return res.status(400).json({
-        success: false,
-        message
-      });
-    }
-
-    // Validate input formats
-    if (!isValidUsername(username)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Username must be 3-20 characters long and contain only letters, numbers, and underscores'
-      });
-    }
-
-    if (!isValidMobile(mobileNumber)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9'
-      });
-    }
-    
-    // Validate email format only if provided
-    if (email && email.trim() !== '') {
-      const emailRegex = /^\S+@\S+\.\S+$/;
-      if (!emailRegex.test(email)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Please enter a valid email address'
-        });
-      }
-    }
-
-    // Create new user
-    const userData = {
-      username,
-      mobileNumber,  // Mobile number is compulsory
-      passwordHash: password // Will be hashed by pre-save middleware
-    };
-    if (email && email.trim() !== '') {
-      userData.email = email;
-    }
-    // Add referral if provided
-    if (referral && referral.trim() !== '') {
-      userData.referral = referral;
-    }
-    const user = new User(userData);
-    await user.save();
-
-    // Generate JWT token
-    const token = generateToken(user._id, 'user');
-
-    // Update last login
-    await user.updateLastLogin();
-
-    res.status(201).json({
+    return res.json({
       success: true,
-      message: 'User registered successfully',
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        mobileNumber: user.mobileNumber,
-        referral: user.referral || '',
-        walletBalance: user.walletBalance || user.wallet,
-        isGuest: user.isGuest || false,
-        role: user.role
-      },
       token,
-      refreshToken: token // For simplicity, using same token as refresh token
-    });
-
-  } catch (error) {
-    console.error('User registration error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error during registration'
-    });
-  }
-};
-
-/**
- * User Login
- */
-const loginUser = async (req, res) => {
-  try {
-    console.log('🚀 [loginUser] Login attempt started');
-    // Debug: print incoming request body
-    console.log('🔍 [loginUser] Incoming body:', req.body);
-    // Accept both 'identifier' and 'email' for backward compatibility
-    const { identifier, email, password } = req.body; 
-    const loginIdentifier = identifier || email;
-
-    console.log('🔍 [loginUser] Using identifier:', loginIdentifier);
-    console.log('🔍 [loginUser] Password provided:', !!password);
-
-    if (!loginIdentifier || !password) {
-      console.log('❌ [loginUser] Missing credentials');
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide username/email/mobile and password'
-      });
-    }
-
-    console.log('🔍 [loginUser] Calling User.findByCredentials...');
-    // Find user by credentials
-    const user = await User.findByCredentials(loginIdentifier, password);
-    console.log('✅ [loginUser] User authentication successful');
-
-    // Generate JWT token
-    console.log('🔍 [loginUser] Generating token...');
-    const token = generateToken(user._id, 'user');
-
-    // Update last login
-    console.log('🔍 [loginUser] Updating last login...');
-    await user.updateLastLogin();
-
-    console.log('✅ [loginUser] Login process completed successfully');
-    res.json({
-      success: true,
-      message: 'Login successful',
       user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        mobileNumber: user.mobileNumber,
-        referral: user.referral || '',
-        walletBalance: user.walletBalance || user.wallet,
-        isGuest: user.isGuest || false,
-        role: user.role,
-        selectedNumbers: user.selectedNumbers,
-        totalWinnings: user.totalWinnings,
-        totalLosses: user.totalLosses,
-        gamesPlayed: user.gamesPlayed
+        id: admin._id,
+        username: admin.username,
+        role: "admin",
       },
-      token,
-      refreshToken: token // For simplicity, using same token as refresh token
     });
-
-  } catch (error) {
-    console.error('❌ [loginUser] Login error occurred:', error.message);
-    console.error('❌ [loginUser] Full error:', error);
-    
-    if (error.message === 'Invalid credentials') {
-      console.log('❌ [loginUser] Returning 401 - Invalid credentials');
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid email/mobile number/username or password'
-      });
-    }
-
-    console.log('❌ [loginUser] Returning 500 - Internal server error');
-    res.status(500).json({
+  } catch (err) {
+    console.error("Admin login error:", err);
+    return res.status(500).json({
       success: false,
-      message: 'Internal server error during login'
+      message: "Server error during login",
     });
   }
 };
 
-/**
- * Admin Login
- */
-const loginAdmin = async (req, res) => {
+// Agent login
+exports.agentLogin = async (req, res) => {
   try {
-    const { identifier, password } = req.body;
-
-    // Find admin by credentials (username or email)
-    const admin = await Admin.findByCredentials(identifier, password);
-
-    // Generate JWT token
-    const token = generateToken(admin._id, 'admin');
-
-    // Update last login
-    await admin.updateLastLogin();
-
-    res.json({
-      success: true,
-      message: 'Admin login successful',
-      data: {
-        admin: {
-          id: admin._id,
-          email: admin.email,
-          fullName: admin.fullName,
-          role: admin.role,
-          permissions: admin.permissions
-        },
-        token
-      }
-    });
-
-  } catch (error) {
-    console.error('Admin login error:', error);
-    
-    if (error.message === 'Invalid credentials') {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid email or password'
-      });
-    }
-
-    if (error.message.includes('temporarily locked')) {
-      return res.status(423).json({
-        success: false,
-        message: error.message
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error during admin login'
-    });
-  }
-};
-
-/**
- * Refresh Token (Optional for future use)
- */
-const refreshToken = async (req, res) => {
-  try {
-    const { refreshToken } = req.body;
-
-    if (!refreshToken) {
+    const { identifier, password } = req.body; // identifier can be mobile, email, username
+    if (!identifier || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Refresh token is required'
+        message: "Identifier and password required",
       });
     }
 
-    // Verify refresh token
-    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
-    
-    if (decoded.type !== 'refresh') {
+    // Find agent by mobile, email, username, or identifier
+    const agent = await Agent.findOne({
+      $or: [
+        { mobile: identifier },
+        { email: identifier.toLowerCase() },
+        { username: identifier.toLowerCase() },
+        { identifier: identifier.toLowerCase() },
+      ],
+    });
+
+    if (!agent) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid refresh token'
+        message: "Invalid credentials",
       });
     }
 
-    // Find user/admin
-    let user;
-    if (decoded.role === 'admin') {
-      user = await Admin.findById(decoded.id);
+    // Compare password (could be hashed or plain mobile number)
+    let isValidPassword = false;
+    if (agent.password) {
+      // Try bcrypt first
+      try {
+        isValidPassword = await bcrypt.compare(password, agent.password);
+      } catch (bcryptErr) {
+        // If bcrypt fails, try plain text comparison (for mobile numbers)
+        isValidPassword = password === agent.password;
+      }
     } else {
-      user = await User.findById(decoded.id);
+      // Fallback to mobile number as password
+      isValidPassword = password === agent.mobile;
     }
 
-    if (!user || !user.isActive) {
+    if (!isValidPassword) {
       return res.status(401).json({
         success: false,
-        message: 'User not found or inactive'
+        message: "Invalid credentials",
       });
     }
 
-    // Generate new tokens
-    const newToken = generateToken(user._id, decoded.role);
-    const newRefreshToken = generateRefreshToken(user._id);
-
-    res.json({
-      success: true,
-      message: 'Tokens refreshed successfully',
-      data: {
-        token: newToken,
-        refreshToken: newRefreshToken
-      }
+    // Generate token
+    const token = signToken({
+      id: agent._id,
+      role: "agent",
+      name: agent.name,
+      mobile: agent.mobile,
     });
 
-  } catch (error) {
-    console.error('Token refresh error:', error);
-    res.status(401).json({
+    return res.json({
+      success: true,
+      token,
+      user: {
+        id: agent._id,
+        name: agent.name,
+        mobile: agent.mobile,
+        email: agent.email,
+        role: "agent",
+      },
+    });
+  } catch (err) {
+    console.error("Agent login error:", err);
+    return res.status(500).json({
       success: false,
-      message: 'Invalid or expired refresh token'
+      message: "Server error during login",
     });
   }
 };
 
-/**
- * Logout (Optional - for token blacklisting in future)
- */
-const logout = async (req, res) => {
+// User login
+exports.userLogin = async (req, res) => {
   try {
-    // In a more advanced implementation, you would add the token to a blacklist
-    // For now, we'll just return success
-    res.json({
-      success: true,
-      message: 'Logged out successfully'
+    const { identifier, password } = req.body; // identifier can be mobile, email, username
+    if (!identifier || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Identifier and password required",
+      });
+    }
+
+    // Find user by mobile, email, or username
+    const user = await User.findOne({
+      $or: [
+        { mobileNumber: identifier },
+        { email: identifier ? identifier.toLowerCase() : null },
+        { username: identifier ? identifier.toLowerCase() : null },
+      ],
     });
-  } catch (error) {
-    console.error('Logout error:', error);
-    res.status(500).json({
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials",
+      });
+    }
+
+    // Compare password
+    const isValidPassword = await bcrypt.compare(password, user.passwordHash);
+    if (!isValidPassword) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials",
+      });
+    }
+
+    // Generate token
+    const token = signToken({
+      id: user._id,
+      role: "user",
+      username: user.username,
+      mobile: user.mobileNumber,
+    });
+
+    return res.json({
+      success: true,
+      token,
+      user: {
+        id: user._id,
+        username: user.username,
+        mobile: user.mobileNumber,
+        email: user.email,
+        role: "user",
+        balance: user.balance,
+      },
+    });
+  } catch (err) {
+    console.error("User login error:", err);
+    return res.status(500).json({
       success: false,
-      message: 'Internal server error during logout'
+      message: "Server error during login",
     });
   }
 };
 
-/**
- * Verify Token (for frontend to check if token is still valid)
- */
-const verifyToken = async (req, res) => {
+// Hash password utility
+exports.hashPassword = async (password) => {
   try {
-    // If we reach here, the token is valid (passed through authMiddleware)
-    const userData = req.user.userData;
-    
-    res.json({
-      success: true,
-      message: 'Token is valid',
-      data: {
-        user: {
-          id: userData._id,
-          username: userData.username || undefined,
-          email: userData.email || undefined,
-          mobileNumber: userData.mobileNumber || undefined,
-          role: req.user.role,
-          isActive: userData.isActive
-        }
-      }
-    });
-  } catch (error) {
-    console.error('Token verification error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error during token verification'
-    });
+    const rounds = parseInt(BCRYPT_ROUNDS, 10) || 10;
+    return await bcrypt.hash(password, rounds);
+  } catch (err) {
+    console.error("Password hashing error:", err);
+    throw new Error("Failed to hash password");
   }
 };
 
-module.exports = {
-  registerUser,
-  loginUser,
-  loginAdmin,
-  refreshToken,
-  logout,
-  verifyToken
+// Verify token utility
+exports.verifyToken = (token) => {
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch (err) {
+    console.error("Token verification error:", err);
+    return null;
+  }
 };
